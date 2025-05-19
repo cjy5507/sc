@@ -1,6 +1,25 @@
 // 공통 인터페이스 및 타입 정의
+import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
+import * as schema from '../db/schema';
 
-// 사용자 인터페이스
+// DrizzleORM 모델 타입 정의
+export type IDbStore = InferSelectModel<typeof schema.stores>;
+export type INewStore = InferInsertModel<typeof schema.stores>;
+
+export type IWatchModel = InferSelectModel<typeof schema.watchModels>;
+export type INewWatchModel = InferInsertModel<typeof schema.watchModels>;
+
+export type IDbUser = InferSelectModel<typeof schema.users>;
+export type INewUser = InferInsertModel<typeof schema.users>;
+
+export type IDbReservation = InferSelectModel<typeof schema.reservations>;
+export type INewReservation = InferInsertModel<typeof schema.reservations>;
+
+// 예약 상태 타입 (데이터베이스)
+export type DbReservationStatus = '대기' | '완료' | '취소';
+
+
+// 사용자 인터페이스 (클라이언트)
 export interface IUser {
   id: string;
   email: string;
@@ -59,7 +78,7 @@ export interface IReservationProcess {
   stores: IStoreProcess[];
   startTime: Date;
   endTime?: Date;
-  overallStatus: ReservationStatus;
+  overallStatus: ReservationProcessStatus;
   logs: string[];
 }
 
@@ -83,6 +102,9 @@ export interface IDashboardState {
   estimatedCompletion?: Date;
 }
 
+// 예약 상태 타입 (클라이언트)
+export type ReservationStatus = '대기' | '완료' | '취소' | 'pending' | 'processing' | 'completed' | 'failed';
+
 // 매장 상태 인터페이스
 export interface IStoreStatus {
   storeId: string;
@@ -94,14 +116,14 @@ export interface IStoreStatus {
   message?: string;
 }
 
-// 예약 상태 타입
-export type ReservationStatus = 'idle' | 'waiting' | 'processing' | 'success' | 'failed';
+// 예약 프로세스 상태 타입 (클라이언트)
+export type ReservationProcessStatus = 'idle' | 'waiting' | 'processing' | 'success' | 'failed';
 
 // 예약 단계 타입
 export type ReservationStage = 'selection' | 'agreement' | 'date_selection' | 'pass_auth' | 'form' | 'confirmation' | 'complete';
 
 // 매장 정보 인터페이스
-export interface IStore {
+export interface IClientStore {
   id: string;
   name: string;
   displayName: string;
