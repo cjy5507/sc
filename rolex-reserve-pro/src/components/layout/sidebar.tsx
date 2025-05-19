@@ -8,9 +8,11 @@ import { Clock, Home, Settings, History, User, Store } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
-interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {}
+interface ISidebarProps extends React.HTMLAttributes<HTMLDivElement> {
+  // 추가 속성이 필요한 경우 여기에 정의
+}
 
-export function Sidebar({ className }: SidebarProps) {
+export function Sidebar({ className }: ISidebarProps) {
   const pathname = usePathname()
 
   return (
