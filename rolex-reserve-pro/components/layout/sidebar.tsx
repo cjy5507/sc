@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Clock, Home, Settings, History, User, Store } from "lucide-react"
 
-import { cn } from "@/utils/cn"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {}
