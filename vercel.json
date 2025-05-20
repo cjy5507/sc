@@ -5,10 +5,7 @@
   "outputDirectory": ".next",
   "framework": "nextjs",
   "functions": {
-    "api/**/*.js": {
-      "excludeFiles": "node_modules/electron/**,electron/**,dist/electron/**"
-    },
-    "api/**/*.ts": {
+    "src/app/api/**/*.ts": {
       "excludeFiles": "node_modules/electron/**,electron/**,dist/electron/**"
     }
   }
