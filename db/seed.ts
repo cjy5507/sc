@@ -20,7 +20,7 @@ async function main() {
       address: '서울특별시 중구 남대문로 81',
       phoneNumber: '02-771-2500',
       description: '롯데백화점 명동점 내 롤렉스 매장',
-      reservationUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
+      reservationUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/',
     },
     {
       name: '현대 판교',
@@ -34,14 +34,14 @@ async function main() {
       address: '서울특별시 강남구 테헤란로 517',
       phoneNumber: '02-552-2233',
       description: '현대백화점 무역센터점 내 롤렉스 매장',
-      reservationUrl: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/appointment/',
+      reservationUrl: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/',
     },
     {
       name: '롯데 서면',
       address: '부산광역시 부산진구 가야대로 772',
       phoneNumber: '051-810-2500',
       description: '롯데백화점 서면점 내 롤렉스 매장',
-      reservationUrl: 'https://www.hongbowatch.co.kr/rolex/contact-busan/appointment/',
+      reservationUrl: 'https://www.hongbowatch.co.kr/rolex/contact-busan/',
     },
   ];
 

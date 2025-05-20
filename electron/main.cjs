@@ -246,162 +246,99 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // 매장별 Playwright 자동화 시나리오 (간단 버전)
-const STORE_CONFIGS = [
-  {
-    name: '현대백화점 판교',
-    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
-  },
-  {
-    name: '현대백화점 무역센터',
-    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
-  },
-  {
-    name: '현대백화점 본점',
-    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
-  },
-  {
-    name: '현대백화점 대구',
-    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
-  },
+const STORES = [
+  { name: '크로노다임', url: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/' },
+  { name: '우노판교', url: 'https://www.unopangyo.com/rolex/contact-gyeonggi/' },
+  { name: '현대', url: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/' },
+  { name: '홍보', url: 'https://www.hongbowatch.co.kr/rolex/contact-busan/' },
 ];
 
-async function main() {
-  const TEST_MODE = process.env.TEST_MODE === 'true';
-  const config = {
-    name: process.env.USER_NAME || '홍길동',
-    phone: process.env.USER_PHONE || '01012345678',
-    message: process.env.USER_MESSAGE || '롤렉스 데이토나 모델에 관심이 있습니다. 매장 방문 및 가격 문의드립니다.',
-    targetDate: process.env.TARGET_DATE || '23',
-    targetTime: process.env.TARGET_TIME || '17:30',
-    reservationTime: { hours: 0, minutes: 0, seconds: 0 },
-  };
-  if (TEST_MODE) {
-    const testTime = new Date();
-    testTime.setSeconds(testTime.getSeconds() + 10); // 10초 후
-    config.reservationTime.hours = testTime.getHours();
-    config.reservationTime.minutes = testTime.getMinutes();
-    config.reservationTime.seconds = testTime.getSeconds();
-    console.log(`테스트 모드: 예약 시간이 ${config.reservationTime.hours}:${config.reservationTime.minutes}:${config.reservationTime.seconds}로 설정됨`);
-  }
+const config = {
+  name: process.env.USER_NAME || '홍길동',
+  phone: process.env.USER_PHONE || '01012345678',
+  message: process.env.USER_MESSAGE || '롤렉스 데이토나 모델에 관심이 있습니다. 매장 방문 예약을 원합니다.',
+  testMode: process.env.TEST_MODE === 'true',
+};
 
+async function handleStore(store) {
   const browser = await chromium.launch({ headless: false, slowMo: 50 });
   const context = await browser.newContext({
     locale: 'ko-KR',
     viewport: { width: 1280, height: 800 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    extraHTTPHeaders: {
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    },
   });
-
-  const pages = [];
-  for (let i = 0; i < STORE_CONFIGS.length; i++) {
-    const page = await context.newPage();
-    pages.push(page);
-  }
-
-  await Promise.all(pages.map((page, idx) =>
-    fullReservationFlow(page, STORE_CONFIGS[idx], `매장${idx+1}`, config)
-  ));
-
-  console.log('전체 예약 자동화 플로우 완료. 브라우저를 닫습니다.');
-  await browser.close();
-}
-
-async function fullReservationFlow(page, storeConfig, pageId, config) {
+  // navigator.webdriver 위장
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+  });
+  const page = await context.newPage();
   try {
-    // 1. 인트로에서 메시지 보내기 버튼 클릭
-    await page.goto(storeConfig.storeUrl, { waitUntil: 'networkidle', timeout: 30000 });
-    await safeClick(page, '#intro > div > div > div.body-text-wrap > a', `${pageId}: 메시지 보내기 버튼`);
-
-    // 2. 메시지 입력 및 제출
-    await safeFill(page, 'input[name="name"]', config.name, `${pageId}: 이름 입력`);
-    await safeFill(page, 'input[name="phone"]', config.phone, `${pageId}: 전화번호 입력`);
-    await safeFill(page, 'textarea[name="message"]', config.message, `${pageId}: 메시지 입력`);
-    await safeClick(page, 'button[type="submit"]', `${pageId}: 메시지 제출`);
-
-    // 3. PASS 인증 팝업/iframe 감지 및 대기
-    await waitForPassAuth(page, pageId);
-
-    // 4. 예약 페이지로 복귀
-    await page.goto(storeConfig.storeUrl, { waitUntil: 'networkidle', timeout: 30000 });
-    // 예약 이미지 클릭
-    await safeClick(page, '#contact_us > div > div.grid-layout.section-contents > div:nth-child(1) > div.picture-wrap > a > picture > img', `${pageId}: 예약 진입 이미지 클릭`);
-    await safeClick(page, '#fappointment > div:nth-child(24) > div > div > a:nth-child(1) > div.picture-wrap > picture > img', `${pageId}: 예약 카드 이미지 클릭`);
-
-    // 5. "동의합니다" 페이지에서 대기
-    await waitUntilExactTime(config.reservationTime);
-    await safeClick(page, 'button:has-text("동의합니다")', `${pageId}: 동의합니다 버튼 클릭`);
-
-    // 6. 이후 예약 플로우(날짜/시간/확인 등)
-    await safeClick(page, `li:has-text("${config.targetDate}")`, `${pageId}: 날짜 선택`);
-    await safeClick(page, 'button:has-text("확인")', `${pageId}: 날짜 확인`);
-    await safeClick(page, `text=${config.targetTime}`, `${pageId}: 시간 선택`);
-    await safeClick(page, 'button:has-text("다음")', `${pageId}: 다음 버튼`);
-    // 이후 추가 입력/확인 등 필요시 추가 구현
-    console.log(`${pageId}: 예약 플로우 완료`);
-  } catch (error) {
-    console.error(`${pageId}: 예약 플로우 중 오류:`, error);
-  }
-}
-
-async function safeClick(page, selector, log) {
-  try {
-    await page.waitForSelector(selector, { timeout: 10000 });
-    await page.click(selector);
-    console.log(`${log} 성공`);
-  } catch (e) {
-    console.log(`${log} 실패:`, e.message);
-  }
-}
-
-async function safeFill(page, selector, value, log) {
-  try {
-    await page.waitForSelector(selector, { timeout: 10000 });
-    await page.fill(selector, value);
-    console.log(`${log} 성공`);
-  } catch (e) {
-    console.log(`${log} 실패:`, e.message);
-  }
-}
-
-async function waitForPassAuth(page, pageId) {
-  console.log(`${pageId}: PASS 인증 팝업/iframe 감지 대기...`);
-  const popupPromise = page.context().waitForEvent('page', { timeout: 15000 }).catch(() => null);
-  const iframePromise = (async () => {
-    for (let i = 0; i < 15; i++) {
+    await page.goto(store.url, { waitUntil: 'networkidle' });
+    // 1. 인트로에서 메시지 보내기 클릭 (디버깅용 스크린샷 및 강제 클릭)
+    try {
+      await page.waitForSelector('a.link-button[href*="message"]', { timeout: 10000, state: 'visible' });
+      await page.screenshot({ path: `before-message-btn-${store.name}.png` });
+      await page.click('a.link-button[href*="message"]', { timeout: 10000, force: true });
+      console.log(`[${store.name}] 메시지 보내기 버튼 클릭 성공`);
+    } catch (e) {
+      await page.screenshot({ path: `fail-message-btn-${store.name}.png` });
+      console.error(`[${store.name}] 메시지 보내기 버튼 클릭 실패:`, e);
+      return;
+    }
+    // 2. 메시지 입력 및 제출 (폼 구조에 따라 수정 필요)
+    await page.waitForSelector('input[name="name"]', { timeout: 10000 });
+    await page.fill('input[name="name"]', config.name);
+    await page.fill('input[name="phone"]', config.phone);
+    await page.fill('textarea[name="message"]', config.message);
+    await page.click('button[type="submit"]', { timeout: 10000 });
+    // 3. PASS 인증 팝업/iframe 감지 (30초간 모든 페이지/프레임 정보 출력)
+    let passDetected = false;
+    for (let i = 0; i < 30; i++) {
+      // 팝업 감지
+      const pages = context.pages();
+      for (const p of pages) {
+        const title = await p.title().catch(() => '');
+        console.log(`[${store.name}] 열린 페이지: url=${p.url()} title=${title}`);
+      }
+      if (pages.length > 1) {
+        passDetected = true;
+        break;
+      }
+      // iframe 감지
       const frames = page.frames();
-      const passFrame = frames.find(f => f.url().includes('pass') || f.name().toLowerCase().includes('pass'));
-      if (passFrame) return passFrame;
-      await new Promise(r => setTimeout(r, 1000));
+      for (const f of frames) {
+        console.log(`[${store.name}] 프레임: url=${f.url()} name=${f.name()}`);
+      }
+      if (frames.some(f => f.url().includes('pass') || f.name().toLowerCase().includes('pass'))) {
+        passDetected = true;
+        break;
+      }
+      await page.waitForTimeout(1000);
     }
-    return null;
-  })();
-  const result = await Promise.race([popupPromise, iframePromise]);
-  if (result) {
-    console.log(`${pageId}: PASS 인증 감지됨! (팝업/iframe)`);
-    if (result.close) {
-      await new Promise(resolve => result.on('close', resolve));
+    if (passDetected) {
+      console.log(`[${store.name}] PASS 인증 감지됨! 인증 후 예약 페이지로 이동하세요.`);
+      // 실제 자동화라면 인증 완료 후 예약 페이지로 이동
+      // await page.goto(store.url.replace('message', 'appointment'));
     } else {
-      await new Promise(resolve => setTimeout(resolve, 30000)); // 임시 30초 대기
+      await page.screenshot({ path: `fail-pass-detect-${store.name}.png` });
+      console.log(`[${store.name}] PASS 인증 감지 실패. 수동 확인 필요.`);
     }
-    console.log(`${pageId}: PASS 인증 완료!`);
-  } else {
-    console.log(`${pageId}: PASS 인증 감지 안됨. 이미 인증되었거나 생략됨.`);
+    // 이후 예약 페이지 진입 및 동의/날짜/시간/확인 등 추가 플로우는 제거
+  } catch (e) {
+    await page.screenshot({ path: `fail-error-${store.name}.png` });
+    console.error(`[${store.name}] 에러:`, e);
+  } finally {
+    if (!config.testMode) await browser.close();
   }
 }
 
-async function waitUntilExactTime({ hours, minutes, seconds }) {
-  const targetTime = new Date();
-  targetTime.setHours(hours, minutes, seconds, 0);
-  const now = new Date();
-  let timeToWait = targetTime.getTime() - now.getTime();
-  if (timeToWait <= 0) {
-    targetTime.setDate(targetTime.getDate() + 1);
-    timeToWait = targetTime.getTime() - now.getTime();
-  }
-  if (timeToWait > 0) {
-    console.log(`예약 시간까지 ${Math.floor(timeToWait / 1000)}초 대기 중...`);
-    await new Promise(resolve => setTimeout(resolve, timeToWait));
-  }
+async function main() {
+  await Promise.all(STORES.map(store => handleStore(store)));
 }
 
-main().catch(console.error);
+main();
 // 기존 runAutomation 등은 주석 처리
+// async function runAutomation(storeId) { /* ... */ }
