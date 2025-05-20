@@ -21,7 +21,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   closeWindow: () => ipcRenderer.send('close-window'),
   getTimeStatus: () => timeSync.getStatus(),
-  onTimeUpdate: (callback) => {
-    timeSync.on('update', callback);
-  }
+  onTimeSyncUpdate: (callback) => {
+    ipcRenderer.on('time-sync-update', (_, status) => callback(status));
+  },
+  // 추가: 자동화 실행 시점에만 시간 동기화 시작
+  startTimeSync: () => timeSync.start(),
 });

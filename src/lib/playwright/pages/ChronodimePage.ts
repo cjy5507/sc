@@ -12,28 +12,24 @@ const STORE_URLS = {
 
 const STORE_SELECTORS = {
   chronodigm: {
-    purposeCard: '.fappointment .purpose-card',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',
     successMessage: '.success-message'
   },
   unopangyo: {
-    purposeCard: '.booking-wrapper .booking-option',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',
     successMessage: '.success-message'
   },
   hyundai: {
-    purposeCard: '.appointment-section .appointment-choice',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',
     successMessage: '.success-message'
   },
   hongbo: {
-    purposeCard: '.booking-container .booking-card',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',

@@ -58,12 +58,19 @@ export function AutomationControl() {
 
   useEffect(() => {
     setIsClient(true);
+    const electronAPI = (window as any).electronAPI;
+
+    // 자동화 페이지 진입(마운트) 시점에만 시간 동기화 시작
+    if (typeof window !== 'undefined' && electronAPI && typeof electronAPI.startTimeSync === 'function') {
+      electronAPI.startTimeSync();
+    }
+
     if (
       typeof window !== 'undefined' &&
-      window.electronAPI &&
-      typeof window.electronAPI.onAutomationStatus === 'function'
+      electronAPI &&
+      typeof electronAPI.onAutomationStatus === 'function'
     ) {
-      window.electronAPI.onAutomationStatus((payload: { storeId: string; status: string; message?: string }) => {
+      electronAPI.onAutomationStatus((payload: { storeId: string; status: string; message?: string }) => {
         setStatus(prev => ({
           ...prev,
           [payload.storeId]: {
@@ -78,12 +85,12 @@ export function AutomationControl() {
       });
     }
     // 시간 동기화 상태 구독
-    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.onTimeUpdate === 'function') {
-      window.electronAPI.onTimeUpdate((status: any) => {
+    if (typeof window !== 'undefined' && electronAPI && typeof electronAPI.onTimeSyncUpdate === 'function') {
+      electronAPI.onTimeSyncUpdate((status: any) => {
         setTimeStatus({ ...status });
       });
-      if (typeof window.electronAPI.getTimeStatus === 'function') {
-        setTimeStatus(window.electronAPI.getTimeStatus());
+      if (typeof electronAPI.getTimeStatus === 'function') {
+        setTimeStatus(electronAPI.getTimeStatus());
       }
     }
   }, []);
@@ -102,8 +109,9 @@ export function AutomationControl() {
     try {
       setStoreLoading(prev => ({ ...prev, [storeId]: true }));
       if (isElectron) {
+        const electronAPI = (window as any).electronAPI;
         // @ts-ignore
-        const result = await window.electronAPI.startAutomation({ stores: [storeId] });
+        const result = await electronAPI.startAutomation({ stores: [storeId] });
         if (result.success) {
           setStatus(prev => ({
             ...prev,
@@ -129,8 +137,9 @@ export function AutomationControl() {
     try {
       setStoreLoading(prev => ({ ...prev, [storeId]: true }));
       if (isElectron) {
+        const electronAPI = (window as any).electronAPI;
         // @ts-ignore
-        await window.electronAPI.stopAutomation({ stores: [storeId] });
+        await electronAPI.stopAutomation({ stores: [storeId] });
       }
       setStatus(prev => ({ ...prev, [storeId]: { status: 'idle', message: '' } }));
       setSelectedStores(prev => prev.filter(id => id !== storeId));
@@ -148,8 +157,9 @@ export function AutomationControl() {
     try {
       storesToStart.forEach(id => setStoreLoading(prev => ({ ...prev, [id]: true })));
       if (isElectron) {
+        const electronAPI = (window as any).electronAPI;
         // @ts-ignore
-        const result = await window.electronAPI.startAutomation({ stores: storesToStart });
+        const result = await electronAPI.startAutomation({ stores: storesToStart });
         if (result.success) {
           setStatus(prev => {
             const next = { ...prev };
@@ -179,11 +189,12 @@ export function AutomationControl() {
     try {
       runningStores.forEach(id => setStoreLoading(prev => ({ ...prev, [id]: true })));
       if (isElectron) {
+        const electronAPI = (window as any).electronAPI;
         // @ts-ignore
-        await window.electronAPI.stopAutomation({ stores: runningStores });
+        await electronAPI.stopAutomation({ stores: runningStores });
         // 창 닫기 추가
-        if (window.electronAPI.closeWindow) {
-          window.electronAPI.closeWindow();
+        if (electronAPI.closeWindow) {
+          electronAPI.closeWindow();
         }
       }
       setStatus(prev => {

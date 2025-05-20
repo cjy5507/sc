@@ -62,6 +62,8 @@ export function TimeSyncIndicator({
     return <CheckCircle2 className="h-4 w-4 mr-1" />;
   };
 
+  if (status == null && error == null) return null;
+
   return (
     <div className={className}>
       {/* Badge showing sync status */}

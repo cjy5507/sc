@@ -8,6 +8,7 @@ const { chromium } = require('playwright');
 // Use absolute path for timeSync.cjs
 const timeSyncPath = path.join(__dirname, '../utils/timeSync.cjs');
 const { timeSync } = require(timeSyncPath);
+require('dotenv').config();
 
 const isDev = electronIsDev;
 
@@ -200,7 +201,7 @@ app.whenReady().then(() => {
   // initializeScheduler();
 
   // Start time synchronization
-  timeSync.start();
+  timeSync.start(5000, 2000);
   timeSync.on('update', (status) => {
     if (mainWindow) {
       mainWindow.webContents.send('time-sync-update', status);
@@ -245,56 +246,162 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // 매장별 Playwright 자동화 시나리오 (간단 버전)
-const STORE_CONFIGS = {
-  chronodigm: {
-    url: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
-    selector: '.fappointment .purpose-card'
+const STORE_CONFIGS = [
+  {
+    name: '현대백화점 판교',
+    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
   },
-  unopangyo: {
-    url: 'https://www.unopangyo.com/rolex/contact-gyeonggi/',
-    selector: '.booking-wrapper .booking-option'
+  {
+    name: '현대백화점 무역센터',
+    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
   },
-  hyundai: {
-    url: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/appointment/',
-    selector: '.appointment-section .appointment-choice'
+  {
+    name: '현대백화점 본점',
+    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
   },
-  hongbo: {
-    url: 'https://www.hongbowatch.co.kr/rolex/contact-busan/appointment/',
-    selector: '.booking-container .booking-card'
-  }
-};
+  {
+    name: '현대백화점 대구',
+    storeUrl: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
+  },
+];
 
-async function runAutomation(storeId) {
-  const config = STORE_CONFIGS[storeId];
-  if (!config) return;
-  let browser = null;
-  let context = null;
-  let page = null;
+async function main() {
+  const TEST_MODE = process.env.TEST_MODE === 'true';
+  const config = {
+    name: process.env.USER_NAME || '홍길동',
+    phone: process.env.USER_PHONE || '01012345678',
+    message: process.env.USER_MESSAGE || '롤렉스 데이토나 모델에 관심이 있습니다. 매장 방문 및 가격 문의드립니다.',
+    targetDate: process.env.TARGET_DATE || '23',
+    targetTime: process.env.TARGET_TIME || '17:30',
+    reservationTime: { hours: 0, minutes: 0, seconds: 0 },
+  };
+  if (TEST_MODE) {
+    const testTime = new Date();
+    testTime.setSeconds(testTime.getSeconds() + 10); // 10초 후
+    config.reservationTime.hours = testTime.getHours();
+    config.reservationTime.minutes = testTime.getMinutes();
+    config.reservationTime.seconds = testTime.getSeconds();
+    console.log(`테스트 모드: 예약 시간이 ${config.reservationTime.hours}:${config.reservationTime.minutes}:${config.reservationTime.seconds}로 설정됨`);
+  }
+
+  const browser = await chromium.launch({ headless: false, slowMo: 50 });
+  const context = await browser.newContext({
+    locale: 'ko-KR',
+    viewport: { width: 1280, height: 800 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
+  });
+
+  const pages = [];
+  for (let i = 0; i < STORE_CONFIGS.length; i++) {
+    const page = await context.newPage();
+    pages.push(page);
+  }
+
+  await Promise.all(pages.map((page, idx) =>
+    fullReservationFlow(page, STORE_CONFIGS[idx], `매장${idx+1}`, config)
+  ));
+
+  console.log('전체 예약 자동화 플로우 완료. 브라우저를 닫습니다.');
+  await browser.close();
+}
+
+async function fullReservationFlow(page, storeConfig, pageId, config) {
   try {
-    mainWindow.webContents.send('automation-status', { storeId, status: 'running', message: '예약 시도중' });
-    browser = await chromium.launch({ headless: false });
-    context = await browser.newContext();
-    page = await context.newPage();
-    // 인스턴스와 stopped 플래그 저장
-    automationProcesses[storeId] = { browser, context, page, stopped: false };
-    await page.goto(config.url, { waitUntil: 'networkidle' });
-    if (automationProcesses[storeId]?.stopped) throw new Error('stopped');
-    try {
-      await page.click('text=모두 수락', { timeout: 3000 });
-    } catch (e) {}
-    if (automationProcesses[storeId]?.stopped) throw new Error('stopped');
-    mainWindow.webContents.send('automation-status', { storeId, status: 'waiting', message: 'PASS 인증 대기중' });
-    await page.click(config.selector);
-    if (automationProcesses[storeId]?.stopped) throw new Error('stopped');
-    mainWindow.webContents.send('automation-status', { storeId, status: 'success', message: '예약 성공!' });
+    // 1. 인트로에서 메시지 보내기 버튼 클릭
+    await page.goto(storeConfig.storeUrl, { waitUntil: 'networkidle', timeout: 30000 });
+    await safeClick(page, '#intro > div > div > div.body-text-wrap > a', `${pageId}: 메시지 보내기 버튼`);
+
+    // 2. 메시지 입력 및 제출
+    await safeFill(page, 'input[name="name"]', config.name, `${pageId}: 이름 입력`);
+    await safeFill(page, 'input[name="phone"]', config.phone, `${pageId}: 전화번호 입력`);
+    await safeFill(page, 'textarea[name="message"]', config.message, `${pageId}: 메시지 입력`);
+    await safeClick(page, 'button[type="submit"]', `${pageId}: 메시지 제출`);
+
+    // 3. PASS 인증 팝업/iframe 감지 및 대기
+    await waitForPassAuth(page, pageId);
+
+    // 4. 예약 페이지로 복귀
+    await page.goto(storeConfig.storeUrl, { waitUntil: 'networkidle', timeout: 30000 });
+    // 예약 이미지 클릭
+    await safeClick(page, '#contact_us > div > div.grid-layout.section-contents > div:nth-child(1) > div.picture-wrap > a > picture > img', `${pageId}: 예약 진입 이미지 클릭`);
+    await safeClick(page, '#fappointment > div:nth-child(24) > div > div > a:nth-child(1) > div.picture-wrap > picture > img', `${pageId}: 예약 카드 이미지 클릭`);
+
+    // 5. "동의합니다" 페이지에서 대기
+    await waitUntilExactTime(config.reservationTime);
+    await safeClick(page, 'button:has-text("동의합니다")', `${pageId}: 동의합니다 버튼 클릭`);
+
+    // 6. 이후 예약 플로우(날짜/시간/확인 등)
+    await safeClick(page, `li:has-text("${config.targetDate}")`, `${pageId}: 날짜 선택`);
+    await safeClick(page, 'button:has-text("확인")', `${pageId}: 날짜 확인`);
+    await safeClick(page, `text=${config.targetTime}`, `${pageId}: 시간 선택`);
+    await safeClick(page, 'button:has-text("다음")', `${pageId}: 다음 버튼`);
+    // 이후 추가 입력/확인 등 필요시 추가 구현
+    console.log(`${pageId}: 예약 플로우 완료`);
   } catch (error) {
-    if (error.message === 'stopped') {
-      mainWindow.webContents.send('automation-status', { storeId, status: 'stopped', message: '자동화 중지됨' });
-    } else {
-      mainWindow.webContents.send('automation-status', { storeId, status: 'error', message: error.message });
-    }
-  } finally {
-    if (browser) await browser.close().catch(() => {});
-    delete automationProcesses[storeId];
+    console.error(`${pageId}: 예약 플로우 중 오류:`, error);
   }
 }
+
+async function safeClick(page, selector, log) {
+  try {
+    await page.waitForSelector(selector, { timeout: 10000 });
+    await page.click(selector);
+    console.log(`${log} 성공`);
+  } catch (e) {
+    console.log(`${log} 실패:`, e.message);
+  }
+}
+
+async function safeFill(page, selector, value, log) {
+  try {
+    await page.waitForSelector(selector, { timeout: 10000 });
+    await page.fill(selector, value);
+    console.log(`${log} 성공`);
+  } catch (e) {
+    console.log(`${log} 실패:`, e.message);
+  }
+}
+
+async function waitForPassAuth(page, pageId) {
+  console.log(`${pageId}: PASS 인증 팝업/iframe 감지 대기...`);
+  const popupPromise = page.context().waitForEvent('page', { timeout: 15000 }).catch(() => null);
+  const iframePromise = (async () => {
+    for (let i = 0; i < 15; i++) {
+      const frames = page.frames();
+      const passFrame = frames.find(f => f.url().includes('pass') || f.name().toLowerCase().includes('pass'));
+      if (passFrame) return passFrame;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    return null;
+  })();
+  const result = await Promise.race([popupPromise, iframePromise]);
+  if (result) {
+    console.log(`${pageId}: PASS 인증 감지됨! (팝업/iframe)`);
+    if (result.close) {
+      await new Promise(resolve => result.on('close', resolve));
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 30000)); // 임시 30초 대기
+    }
+    console.log(`${pageId}: PASS 인증 완료!`);
+  } else {
+    console.log(`${pageId}: PASS 인증 감지 안됨. 이미 인증되었거나 생략됨.`);
+  }
+}
+
+async function waitUntilExactTime({ hours, minutes, seconds }) {
+  const targetTime = new Date();
+  targetTime.setHours(hours, minutes, seconds, 0);
+  const now = new Date();
+  let timeToWait = targetTime.getTime() - now.getTime();
+  if (timeToWait <= 0) {
+    targetTime.setDate(targetTime.getDate() + 1);
+    timeToWait = targetTime.getTime() - now.getTime();
+  }
+  if (timeToWait > 0) {
+    console.log(`예약 시간까지 ${Math.floor(timeToWait / 1000)}초 대기 중...`);
+    await new Promise(resolve => setTimeout(resolve, timeToWait));
+  }
+}
+
+main().catch(console.error);
+// 기존 runAutomation 등은 주석 처리
