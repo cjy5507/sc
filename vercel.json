@@ -3,5 +3,21 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "outputDirectory": ".next",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "functions": {
+    "api/**/*.js": {
+      "excludeFiles": [
+        "node_modules/electron/**",
+        "electron/**",
+        "dist/electron/**"
+      ]
+    },
+    "api/**/*.ts": {
+      "excludeFiles": [
+        "node_modules/electron/**",
+        "electron/**",
+        "dist/electron/**"
+      ]
+    }
+  }
 }
