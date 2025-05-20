@@ -4,10 +4,10 @@ import { BasePage } from './BasePage';
 type StoreType = 'chronodigm' | 'unopangyo' | 'hyundai' | 'hongbo';
 
 const STORE_URLS = {
-  chronodigm: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
+  chronodigm: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/',
   unopangyo: 'https://www.unopangyo.com/rolex/contact-gyeonggi/',
-  hyundai: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/appointment/',
-  hongbo: 'https://www.hongbowatch.co.kr/rolex/contact-busan/appointment/'
+  hyundai: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/',
+  hongbo: 'https://www.hongbowatch.co.kr/rolex/contact-busan/'
 };
 
 const STORE_SELECTORS = {
