@@ -62,4 +62,17 @@ node_modules/
 # OS specific
 # Task files
 tasks.json
-tasks/ 
+tasks/
+
+# 테스트/릴리즈/결과물 제외
+playwright-report/
+release/
+test-results/
+tests/
+*.log
+*.zip
+*.dmg
+*.blockmap
+*.webm
+*.png
+*.md 
