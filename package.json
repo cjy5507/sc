@@ -48,8 +48,6 @@
     "dotenv": "^16.5.0",
     "drizzle-kit": "^0.31.1",
     "drizzle-orm": "^0.43.1",
-    "electron-is-dev": "^3.0.1",
-    "electron-store": "^10.0.1",
     "inquirer": "^9.3.7",
     "lucide-react": "^0.511.0",
     "next": "15.3.2",
@@ -85,7 +83,7 @@
     "wait-on": "^8.0.3"
   },
   "description": "Rolex Reserve Pro - Rolex Reservation Management System",
-  "author": "Your Name <your.email@example.com>",
+  "author": "Your Name <cjy0573@naver.com>",
   "build": {
     "appId": "com.rolexreserve.app",
     "productName": "Rolex Reserve Pro",
