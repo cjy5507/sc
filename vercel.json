@@ -6,18 +6,10 @@
   "framework": "nextjs",
   "functions": {
     "api/**/*.js": {
-      "excludeFiles": [
-        "node_modules/electron/**",
-        "electron/**",
-        "dist/electron/**"
-      ]
+      "excludeFiles": "node_modules/electron/**,electron/**,dist/electron/**"
     },
     "api/**/*.ts": {
-      "excludeFiles": [
-        "node_modules/electron/**",
-        "electron/**",
-        "dist/electron/**"
-      ]
+      "excludeFiles": "node_modules/electron/**,electron/**,dist/electron/**"
     }
   }
 }
