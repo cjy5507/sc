@@ -2,44 +2,111 @@
   "name": "rolex-reserve-pro",
   "version": "0.1.0",
   "private": true,
+  "main": "./dist/electron/main.cjs",
+  "type": "module",
+  "exports": {
+    ".": "./dist/electron/main.cjs"
+  },
   "scripts": {
-    "dev": "next dev --turbopack",
     "build": "next build",
+    "copy-utils": "mkdir -p dist/utils && cp utils/timeSync.cjs dist/utils/timeSync.cjs",
+    "dev": "next dev -p 3000",
+    "build:electron": "rimraf dist && tsc -p tsconfig.electron.json && npm run dev:electron:build-preload && node build-electron.js",
+    "build:full": "npm run build && npm run build:electron",
+    "export": "next build && next export",
     "start": "next start",
+    "electron": "cross-env NODE_ENV=production electron dist/electron",
+    "dev:electron:copy-utils": "mkdir -p dist/utils && cp utils/timeSync.cjs dist/utils/timeSync.cjs",
+    "dev:electron:build-preload": "tsc electron/preload.ts --outDir dist/electron --module commonjs --target es2020",
+    "electron:dev": "npm run dev:electron:copy-utils && npm run dev:electron:build-preload && concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build:full && npm run export && electron-builder",
+    "electron:package": "npm run build:full && npm run export && electron-builder build --mac --arm64 --x64=false",
+    "postinstall": "electron-builder install-app-deps",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx db/seed.ts"
+    "db:seed": "tsx db/seed.ts",
+    "reserve": "tsx scripts/startReservation.ts",
+    "reserve:interactive": "tsx scripts/startReservation.ts interactive"
+  },
+  "bin": {
+    "rolex-reserve": "./scripts/startReservation.ts"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.0.0",
     "@radix-ui/react-icons": "^1.3.2",
+    "@radix-ui/react-label": "^2.1.6",
+    "@radix-ui/react-progress": "^1.1.6",
+    "@radix-ui/react-radio-group": "^1.3.6",
     "@radix-ui/react-slot": "^1.2.2",
     "@radix-ui/react-toast": "^1.2.13",
     "@vercel/postgres": "^0.10.0",
+    "antd": "^5.25.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "commander": "^11.1.0",
     "dotenv": "^16.5.0",
     "drizzle-kit": "^0.31.1",
     "drizzle-orm": "^0.43.1",
+    "electron-is-dev": "^3.0.1",
+    "electron-store": "^10.0.1",
+    "inquirer": "^9.3.7",
     "lucide-react": "^0.511.0",
     "next": "15.3.2",
+    "playwright": "^1.52.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.3.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.25.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.52.0",
     "@tailwindcss/postcss": "^4",
+    "@types/electron-store": "^1.3.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.17",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^36.2.1",
+    "electron-builder": "^26.0.12",
     "eslint": "^9",
     "eslint-config-next": "15.3.2",
+    "fs-extra": "^11.3.0",
     "postcss": "^8.4.35",
+    "rimraf": "^6.0.1",
+    "sonner": "^1.0.0",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.19.4",
-    "typescript": "^5"
+    "typescript": "^5.8.3",
+    "wait-on": "^8.0.3"
+  },
+  "description": "Rolex Reserve Pro - Rolex Reservation Management System",
+  "author": "Your Name <your.email@example.com>",
+  "build": {
+    "appId": "com.rolexreserve.app",
+    "productName": "Rolex Reserve Pro",
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "asar": true,
+    "extraMetadata": {
+      "main": "dist/electron/main.js"
+    }
   }
 }

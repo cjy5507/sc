@@ -3,16 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Clock, Home, Settings, History, User, Store } from "lucide-react"
+import { Clock, Home, Settings, History, User, Store, Play } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
-interface ISidebarProps extends React.HTMLAttributes<HTMLDivElement> {
-  // 추가 속성이 필요한 경우 여기에 정의
-}
-
-export function Sidebar({ className }: ISidebarProps) {
+export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
 
   return (
@@ -61,6 +57,16 @@ export function Sidebar({ className }: ISidebarProps) {
               <Link href="/history">
                 <History className="mr-2 h-4 w-4" />
                 예약 이력
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant={pathname === "/automation" ? "default" : "ghost"}
+              className="w-full justify-start"
+            >
+              <Link href="/automation">
+                <Play className="mr-2 h-4 w-4" />
+                자동화 실행
               </Link>
             </Button>
           </div>
