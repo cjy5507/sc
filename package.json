@@ -9,18 +9,18 @@
   },
   "scripts": {
     "build": "next build",
-    "copy-utils": "mkdir -p dist/utils && cp utils/timeSync.cjs dist/utils/timeSync.cjs",
+    "copy-utils": "node scripts/copy-utils.cjs",
     "dev": "next dev -p 3000",
-    "build:electron": "rimraf dist && tsc -p tsconfig.electron.json && npm run dev:electron:build-preload && node build-electron.js",
+    "build:electron": "rimraf dist && tsc -p tsconfig.electron.json && npm run dev:electron:build-preload && npm run copy-utils && node build-electron.js",
     "build:full": "npm run build && npm run build:electron",
-    "export": "next build && next export",
+    "export": "next build",
     "start": "next start",
-    "electron": "cross-env NODE_ENV=production electron dist/electron",
-    "dev:electron:copy-utils": "mkdir -p dist/utils && cp utils/timeSync.cjs dist/utils/timeSync.cjs",
+    "electron": "cross-env NODE_ENV=production electron dist/electron/main.cjs",
+    "dev:electron:copy-utils": "node scripts/copy-utils.cjs",
     "dev:electron:build-preload": "tsc electron/preload.ts --outDir dist/electron --module commonjs --target es2020",
     "electron:dev": "npm run dev:electron:copy-utils && npm run dev:electron:build-preload && concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build:full && npm run export && electron-builder",
-    "electron:package": "npm run build:full && npm run export && electron-builder build --mac --arm64 --x64=false",
+    "electron:build": "npm run build:full && electron-builder",
+    "electron:package": "npm run build:full && electron-builder build --mac --arm64 --x64=false",
     "postinstall": "electron-builder install-app-deps",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
@@ -95,6 +95,13 @@
         "zip"
       ],
       "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "assets/icon.ico"
     },
     "directories": {
       "buildResources": "assets",

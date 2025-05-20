@@ -75,7 +75,8 @@ class TimeSync extends EventEmitter {
       https
         .get('https://worldtimeapi.org/api/timezone/Asia/Seoul', (res) => {
           if (res.statusCode !== 200) {
-            reject(new Error(`Status code ${res.statusCode}`));
+            console.error('시간 동기화 API 상태 코드 오류:', res.statusCode);
+            resolve(new Date()); // 에러 시 로컬 시간 반환
             return;
           }
           let data = '';
@@ -86,11 +87,15 @@ class TimeSync extends EventEmitter {
               const date = new Date(json.datetime);
               resolve(date);
             } catch (e) {
-              reject(e);
+              console.error('시간 동기화 파싱 오류:', e);
+              resolve(new Date()); // 에러 시 로컬 시간 반환
             }
           });
         })
-        .on('error', (err) => reject(err));
+        .on('error', (err) => {
+          console.error('시간 동기화 네트워크 오류:', err);
+          resolve(new Date()); // 에러 시 로컬 시간 반환
+        });
     });
   }
 }

@@ -1,6 +1,6 @@
 // 기본 Electron 모듈 가져오기
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require('path');
 
@@ -27,13 +27,19 @@ function createWindow() {
   //mainWindow.webContents.openDevTools();
 
   // 윈도우가 닫힐 때 이벤트 처리
-  mainWindow.on('closed', function() {
-    mainWindow = null;
+  mainWindow.on('closed', () => {
+    app.quit();
   });
 }
 
 // Electron이 초기화를 완료하고 준비되면 윈도우 생성
-app.on('ready', createWindow);
+app.on('ready', () => {
+  createWindow();
+  Menu.setApplicationMenu(null);
+  mainWindow.on('closed', () => {
+    app.quit();
+  });
+});
 
 // 모든 윈도우가 닫히면 앱 종료 (macOS 제외)
 app.on('window-all-closed', function() {
@@ -47,4 +53,8 @@ app.on('activate', function() {
   if (mainWindow === null) {
     createWindow();
   }
+});
+
+ipcMain.on('close-window', () => {
+  if (mainWindow) mainWindow.close();
 });

@@ -54,6 +54,7 @@ export function AutomationControl() {
       [store.id]: { status: 'idle' as StoreStatus, message: '' }
     }), {})
   );
+  const [timeStatus, setTimeStatus] = useState<any>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -75,6 +76,15 @@ export function AutomationControl() {
           setSelectedStores(prev => prev.filter(id => id !== payload.storeId));
         }
       });
+    }
+    // 시간 동기화 상태 구독
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.onTimeUpdate === 'function') {
+      window.electronAPI.onTimeUpdate((status: any) => {
+        setTimeStatus({ ...status });
+      });
+      if (typeof window.electronAPI.getTimeStatus === 'function') {
+        setTimeStatus(window.electronAPI.getTimeStatus());
+      }
     }
   }, []);
 
@@ -171,6 +181,10 @@ export function AutomationControl() {
       if (isElectron) {
         // @ts-ignore
         await window.electronAPI.stopAutomation({ stores: runningStores });
+        // 창 닫기 추가
+        if (window.electronAPI.closeWindow) {
+          window.electronAPI.closeWindow();
+        }
       }
       setStatus(prev => {
         const next = { ...prev };
@@ -261,6 +275,17 @@ export function AutomationControl() {
             <div className="flex items-center">
               <h3 className="text-lg font-medium mr-4">시스템 시간 상태</h3>
               <TimeSyncIndicator showAlert={true} />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {timeStatus ? (
+                <>
+                  <div>오프셋: {timeStatus.offsetMs}ms</div>
+                  <div>동기화: {timeStatus.synced ? '정상' : '불일치'}</div>
+                  <div>마지막 동기화: {timeStatus.lastSynced ? new Date(timeStatus.lastSynced).toLocaleString() : '-'}</div>
+                </>
+              ) : (
+                <>동기화 정보 없음</>
+              )}
             </div>
           </div>
         </CardContent>

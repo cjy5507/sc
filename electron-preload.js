@@ -1,5 +1,6 @@
 // Electron preload 스크립트
 const { contextBridge, ipcRenderer } = require('electron');
+const { timeSync } = require('./utils/timeSync.cjs');
 
 // 렌더러 프로세스에 안전하게 노출할 API 정의
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -17,5 +18,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.once('automation-reply', handler);
       ipcRenderer.send('start-automation', storeConfig);
     });
+  },
+  closeWindow: () => ipcRenderer.send('close-window'),
+  getTimeStatus: () => timeSync.getStatus(),
+  onTimeUpdate: (callback) => {
+    timeSync.on('update', callback);
   }
 });
