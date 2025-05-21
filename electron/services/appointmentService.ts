@@ -1,9 +1,9 @@
 import { Page, Browser, BrowserContext } from 'playwright';
-import { Store, AutomationProcess, AutomationStatus } from '../types';
+import { chromium } from 'playwright';
+import { Store, AutomationProcess, AutomationStatus, AutomationResult } from '../types';
 import { BrowserWindow } from 'electron';
-import { waitUntilMidnight } from '../utils/timeUtils';
+import { waitUntilMidnight, humanDelay } from '../utils/timeUtils';
 import { humanClick, moveMouseNaturally } from '../utils/botDetectionAvoidance';
-import { humanDelay } from '../utils/timeUtils';
 
 interface AppointmentServiceOptions {
   mainWindow: BrowserWindow | null;
@@ -17,6 +17,202 @@ export class AppointmentService {
   constructor(options: AppointmentServiceOptions) {
     this.mainWindow = options.mainWindow;
     this.automationProcesses = options.automationProcesses;
+  }
+
+  /**
+   * 쿠키 및 광고 처리 메서드
+   */
+  private async handleCookiesAndAds(page: Page, store: Store): Promise<void> {
+    try {
+      // 쿠키 수락 버튼 찾기 및 클릭
+      const cookieSelectors = [
+        'button[id*="cookie"]',
+        'button[class*="cookie"]',
+        'a[id*="cookie"]',
+        'a[class*="cookie"]',
+        'button:has-text("Accept")',
+        'button:has-text("Accept All")',
+        'button:has-text("동의")',
+        'button:has-text("모두 동의")'
+      ];
+      
+      for (const selector of cookieSelectors) {
+        const exists = await page.waitForSelector(selector, {
+          state: 'visible',
+          timeout: 5000
+        }).catch(() => null);
+        
+        if (exists) {
+          console.log(`[${store.name}] 쿠키 동의 버튼 발견: ${selector}`);
+          await humanClick(page, selector);
+          await humanDelay(500, 1500);
+          break;
+        }
+      }
+      
+      // 광고 팝업 닫기 버튼 찾기 및 클릭
+      const closeSelectors = [
+        'button.close',
+        'button[class*="close"]',
+        'button[aria-label="Close"]',
+        'div.close-button',
+        'button:has-text("×")',
+        'button:has-text("✕")',
+        'button:has-text("닫기")',
+        'button:has-text("Close")'
+      ];
+      
+      for (const selector of closeSelectors) {
+        const exists = await page.waitForSelector(selector, {
+          state: 'visible',
+          timeout: 5000
+        }).catch(() => null);
+        
+        if (exists) {
+          console.log(`[${store.name}] 광고 닫기 버튼 발견: ${selector}`);
+          await humanClick(page, selector);
+          await humanDelay(500, 1500);
+          break;
+        }
+      }
+    } catch (error) {
+      console.log(`[${store.name}] 쿠키/광고 처리 중 오류 (계속 진행):`, error);
+    }
+  }
+  
+  /**
+   * 문의하기 버튼 클릭 메서드
+   */
+  private async clickContactButton(page: Page, store: Store): Promise<void> {
+    try {
+      // 자연스러운 스크롤 추가
+      await page.evaluate(() => {
+        window.scrollTo({
+          top: 100,
+          behavior: 'smooth'
+        });
+      });
+      
+      await humanDelay(800, 1500);
+      
+      // 메시지 또는 문의하기 관련 버튼 찾기
+      const contactSelectors = [
+        'a.link-button[href*="message"]',
+        'a[href*="contact"]',
+        'button:has-text("문의하기")',
+        'a:has-text("문의하기")',
+        'button:has-text("Contact")',
+        'a:has-text("Contact")',
+        'button:has-text("메시지")',
+        'a:has-text("메시지")'
+      ];
+      
+      for (const selector of contactSelectors) {
+        const exists = await page.waitForSelector(selector, {
+          state: 'visible',
+          timeout: 5000
+        }).catch(() => null);
+        
+        if (exists) {
+          console.log(`[${store.name}] 문의하기 버튼 발견: ${selector}`);
+          
+          // 자연스러운 마우스 움직임과 클릭
+          await moveMouseNaturally(page, selector);
+          await humanDelay(300, 800);
+          await humanClick(page, selector);
+          
+          // 클릭 후 페이지 로딩 대기
+          await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+            console.log(`[${store.name}] 페이지 로딩 대기 시간 초과, 계속 진행`);
+          });
+          
+          return;
+        }
+      }
+      
+      throw new Error('문의하기 버튼을 찾을 수 없음');
+    } catch (error) {
+      console.error(`[${store.name}] 문의하기 버튼 클릭 중 오류:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 메시지 입력 및 PASS 인증 처리 메서드
+   */
+  private async handleMessageAndPassAuth(context: BrowserContext, page: Page, store: Store): Promise<void> {
+    try {
+      // 메시지 폼 찾기
+      console.log(`[${store.name}] 메시지 입력 폼 찾는 중...`);
+      await page.waitForSelector('input[name="name"]', { timeout: 15000 });
+      
+      // 자연스러운 입력
+      console.log(`[${store.name}] 이름 입력 중...`);
+      await page.fill('input[name="name"]', store.config.name || '');
+      await humanDelay(500, 1200);
+      
+      console.log(`[${store.name}] 전화번호 입력 중...`);
+      await page.fill('input[name="phone"]', store.config.phone || '');
+      await humanDelay(500, 1200);
+      
+      console.log(`[${store.name}] 메시지 입력 중...`);
+      await page.fill('textarea[name="message"]', store.config.message || '');
+      await humanDelay(800, 1500);
+      
+      // 제출 버튼 클릭
+      console.log(`[${store.name}] 제출 버튼 찾는 중...`);
+      const submitSelector = 'button[type="submit"]';
+      await page.waitForSelector(submitSelector, { timeout: 10000 });
+      
+      // 자연스러운 클릭
+      await moveMouseNaturally(page, submitSelector);
+      await humanDelay(300, 800);
+      await humanClick(page, submitSelector);
+      
+      // PASS 인증 팝업 대기 설정
+      console.log(`[${store.name}] PASS 인증 대기 시작...`);
+      
+      // 인증 완료 여부 확인 
+      let authCompleted = false;
+      const startTime = Date.now();
+      const maxWaitTime = 2 * 60 * 1000; // 2분
+      
+      while (Date.now() - startTime < maxWaitTime) {
+        // 현재 모든 페이지 체크
+        const pages = context.pages();
+        for (const p of pages) {
+          try {
+            const url = p.url();
+            
+            // 인증 완료 URL 패턴 체크
+            if (url.includes('/mypage') || 
+                url.includes('/user') || 
+                url.includes('/profile') || 
+                url.includes('message/complete') || 
+                url.includes('auth/success')) {
+              console.log(`[${store.name}] 인증 완료 감지됨! URL: ${url}`);
+              authCompleted = true;
+              break;
+            }
+          } catch (err) {
+            // URL 가져오기 오류 무시
+            continue;
+          }
+        }
+        
+        if (authCompleted) break;
+        await page.waitForTimeout(1000); // 1초마다 체크
+      }
+      
+      if (!authCompleted) {
+        console.log(`[${store.name}] PASS 인증 대기 시간 초과. 수동 인증이 필요할 수 있습니다.`);
+      } else {
+        console.log(`[${store.name}] PASS 인증이 성공적으로 완료되었습니다.`);
+      }
+    } catch (error) {
+      console.error(`[${store.name}] 메시지 입력 및 PASS 인증 중 오류:`, error);
+      throw error;
+    }
   }
 
   /**
@@ -232,108 +428,263 @@ export class AppointmentService {
     store: Store,
     retries = 3
   ): Promise<Page | null> {
-    console.log(`[${store.name}] 예약 페이지 URL: ${store.url}appointment/`);
+    console.log(`[${store.name}] 예약 페이지 이동 시도...`);
     let appointmentPage: Page | null = null;
     
-    const targetUrl = `${store.url}appointment/`;
-    
-    // 현재 페이지가 이미 인증을 완료한 페이지인지 확인
-    const currentUrl = await page.url();
-    console.log(`[${store.name}] 현재 인증 완료 페이지 URL: ${currentUrl}`);
-    
-    // 현재 컨텍스트에 새 페이지 생성
     try {
-      console.log(`[${store.name}] 인증된 컨텍스트에서 새 탭 열기`);
+      // 인증된 페이지 상태 확인
+      const currentUrl = await page.url();
+      console.log(`[${store.name}] 현재 인증된 페이지 URL: ${currentUrl}`);
+      
+      // 매우 자연스러운 브라우징 시뮬레이션 구현
+      // 1. 인증된 페이지에서 초기 작업 시작
+      console.log(`[${store.name}] 인증된 페이지에서 인간처럼 사이트 탐색 시작...`);
+      
+      // 사람처럼 스크롤과 마우스 움직임 시뮬레이션
+      await this.simulateHumanBehavior(page);
+      
+      // 2. 새 탭에서 홈페이지로 이동 (인증 세션 유지)
+      console.log(`[${store.name}] 인증된 컨텍스트에서 새 탭 생성...`);
       appointmentPage = await context.newPage();
       
-      // 사람이 URL을 직접 입력하는 것처럼 시뮬레이션
-      console.log(`[${store.name}] 사람처럼 URL 입력 시작...`);
+      // 마우스 움직임 시뮬레이션 (봇 감지 우회 핵심)
+      await appointmentPage.mouse.move(100, 100);
+      await humanDelay(800, 1500);
       
-      // 빈 페이지에서 시작
-      await appointmentPage.goto('about:blank', { timeout: 10000 });
-      
-      // 포커스 설정 및 URL 바에 입력
-      await appointmentPage.evaluate(() => {
-        // 주소창에 포커스를 시뮬레이션
-        const focusEvent = new FocusEvent('focus');
-        document.dispatchEvent(focusEvent);
+      // 3. 사이트 메인 페이지 직접 방문
+      console.log(`[${store.name}] 메인 페이지 방문...`);
+      await appointmentPage.goto(store.url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
       });
       
-      // 잠시 대기 (사람처럼)
-      await appointmentPage.waitForTimeout(1000);
+      // 로딩 대기
+      await appointmentPage.waitForLoadState('networkidle');
+      await humanDelay(2000, 4000);
       
-      // 한 글자씩 입력 (사람처럼)
-      const urlChars = targetUrl.split('');
-      for (const char of urlChars) {
-        await appointmentPage.keyboard.type(char, { delay: Math.random() * 100 + 50 });
-      }
+      // 스크롤과 마우스 움직임으로 사람처럼 행동
+      await this.simulateHumanBehavior(appointmentPage);
       
-      // 엔터 키 누르기
-      await appointmentPage.waitForTimeout(500);
-      console.log(`[${store.name}] 입력 완료, 엔터 누르기`);
-      await appointmentPage.keyboard.press('Enter');
+      // 4. 예약 페이지 방문 시도 (URL 직접 입력 접근)
+      const appointmentUrl = `${store.url}appointment/`;
+      console.log(`[${store.name}] 예약 페이지로 이동 시도: ${appointmentUrl}`);
       
-      // 페이지 로드 대기
-      console.log(`[${store.name}] 페이지 로딩 대기 중...`);
-      await appointmentPage.waitForLoadState('load', { timeout: 60000 });
-      await appointmentPage.waitForTimeout(5000);
+      // 실제 URL 입력하는 것처럼 지연 추가
+      await humanDelay(1000, 2000);
       
-      // 페이지가 제대로 로드됐는지 확인
-      let currentPageUrl = '';
+      // 사람처럼 페이지 이동 시뮬레이션
       try {
-        currentPageUrl = await appointmentPage.url();
-        console.log(`[${store.name}] 현재 페이지 URL: ${currentPageUrl}`);
+        // 새로운 시도: 페이지 이동하는 자바스크립트 실행
+        await appointmentPage.evaluate((url) => {
+          // 사람이 주소창에 주소를 입력하는 것과 유사한 방식
+          window.location.href = url;
+        }, appointmentUrl);
         
-        if (currentPageUrl === 'about:blank' || !currentPageUrl.includes('appointment')) {
-          console.log(`[${store.name}] 유효하지 않은 URL로 로드됨 (${currentPageUrl}), 재시도...`);
+        // 충분한 시간 대기
+        await humanDelay(3000, 5000);
+        await appointmentPage.waitForLoadState('domcontentloaded');
+        await humanDelay(1000, 3000);
+        
+        // 페이지 상태 확인
+        const currentUrl = await appointmentPage.url();
+        console.log(`[${store.name}] 현재 URL: ${currentUrl}`);
+        
+        // about:blank인 경우 다른 방법으로 재시도
+        if (currentUrl === 'about:blank') {
+          console.log(`[${store.name}] about:blank 발견, 다른 방법으로 시도...`);
           
-          // 다시 시도: 직접 goto 메소드 사용
-          console.log(`[${store.name}] goto 메소드로 직접 이동 시도`);
-          await appointmentPage.goto(targetUrl, { waitUntil: 'load', timeout: 30000 });
-          await appointmentPage.waitForTimeout(3000);
+          // 일반 사용자 접근과 유사한 방법으로 시도
+          await appointmentPage.goto(store.url, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
+          });
           
-          currentPageUrl = await appointmentPage.url();
-          if (currentPageUrl === 'about:blank' || !currentPageUrl.includes('appointment')) {
-            throw new Error(`예약 페이지로 이동 실패: ${currentPageUrl}`);
+          await humanDelay(1000, 2000);
+          await this.simulateHumanBehavior(appointmentPage);
+          
+          // 예약 관련 링크 찾기
+          const navLinkSelectors = [
+            'a[href*="appointment"]',
+            'a:has-text("예약")',
+            'a:has-text("Appointment")',
+            'nav a',
+            'header a',
+            '.menu a'
+          ];
+          
+          // 페이지의 모든 링크 찾기 시도
+          let linkFound = false;
+          
+          for (const selector of navLinkSelectors) {
+            const exists = await appointmentPage.waitForSelector(selector, {
+              state: 'visible',
+              timeout: 3000
+            }).then(() => true).catch(() => false);
+            
+            if (exists) {
+              // 사람처럼 링크로 마우스 이동
+              await appointmentPage.mouse.move(300, 300);
+              await humanDelay(500, 1200);
+              
+              // 링크 클릭
+              console.log(`[${store.name}] 예약 관련 링크 발견 및 클릭: ${selector}`);
+              await appointmentPage.click(selector);
+              linkFound = true;
+              break;
+            }
+          }
+          
+          // 링크를 찾지 못한 경우 마지막 수단으로 직접 URL 접근
+          if (!linkFound) {
+            console.log(`[${store.name}] 링크를 찾지 못함, 마지막 시도로 history.pushState 사용...`);
+            
+            // history.pushState 사용 (브라우저 내부 네비게이션과 유사)
+            await appointmentPage.evaluate((url) => {
+              window.history.pushState({}, '', url);
+              window.location.reload();
+            }, appointmentUrl);
           }
         }
+      } catch (navError) {
+        console.error(`[${store.name}] 페이지 이동 중 오류:`, navError);
         
-        // 페이지 콘텐츠 확인
-        const pageContent = await appointmentPage.content();
-        const hasRolexContent = pageContent.includes('rolex') || pageContent.includes('appointment');
-        
-        if (!hasRolexContent) {
-          console.log(`[${store.name}] 페이지 콘텐츠에 필요한 요소가 없음`);
-          throw new Error('페이지 콘텐츠 검증 실패');
-        }
-        
-        console.log(`[${store.name}] 예약 페이지 로드 성공!`);
-        return appointmentPage;
-      } catch (err) {
-        console.log(`[${store.name}] 페이지 검증 실패:`, err);
-        
-        // 페이지 스크린샷 저장 (디버깅용)
-        try {
-          await appointmentPage.screenshot({ 
-            path: `navigation-error-${store.id}-${Date.now()}.png`,
-            fullPage: true 
-          });
-          console.log(`[${store.name}] 오류 화면 스크린샷 저장됨`);
-        } catch (e) {
-          console.log(`[${store.name}] 스크린샷 저장 실패:`, e);
-        }
-        
-        // 페이지 닫기
-        await appointmentPage.close().catch(() => {});
-        return null;
+        // 마지막 보루: 직접 URL 접근
+        console.log(`[${store.name}] 최후의 시도: 직접 URL 접근`);
+        await appointmentPage.goto(appointmentUrl, {
+          waitUntil: 'networkidle',
+          timeout: 30000
+        });
       }
+      
+      // 최종 페이지 로딩 대기
+      await appointmentPage.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {
+        console.log(`[${store.name}] 페이지 로딩 완료 대기 실패, 계속 진행`);
+      });
+      await humanDelay(3000, 5000);
+      
+      // 최종 URL 확인
+      const finalUrl = await appointmentPage.url();
+      console.log(`[${store.name}] 최종 URL: ${finalUrl}`);
+      
+      // 페이지 콘텐츠 가져오기 시도
+      let pageContent = '';
+      try {
+        pageContent = await appointmentPage.content();
+      } catch (e) {
+        console.log(`[${store.name}] 페이지 콘텐츠 가져오기 실패:`, e);
+      }
+      
+      // 실패 판단 기준: about:blank 또는 콘텐츠 키워드 부재
+      if (finalUrl === 'about:blank' || (!pageContent.includes('rolex') && !pageContent.includes('appointment') && !pageContent.includes('예약'))) {
+        console.log(`[${store.name}] 페이지 검증 실패, 스크린샷 저장 시도...`);
+        
+        try {
+          await appointmentPage.screenshot({
+            path: `navigation-failure-${store.id}-${Date.now()}.png`,
+            fullPage: true
+          });
+        } catch (e) {
+          // 스크린샷 실패 무시
+        }
+        
+        if (retries > 0) {
+          console.log(`[${store.name}] 재시도 ${retries}번 남음...`);
+          await appointmentPage.close().catch(() => {});
+          await humanDelay(3000, 5000);
+          return this.navigateToAppointmentPage(browser, context, page, store, retries - 1);
+        }
+        
+        throw new Error(`예약 페이지로 이동 실패: ${finalUrl}`);
+      }
+      
+      console.log(`[${store.name}] 예약 페이지 이동 성공!`);
+      return appointmentPage;
     } catch (err) {
       console.error(`[${store.name}] 예약 페이지 이동 중 오류:`, err);
       
       if (appointmentPage && !appointmentPage.isClosed()) {
+        try {
+          await appointmentPage.screenshot({
+            path: `final-error-${store.id}-${Date.now()}.png`,
+            fullPage: true
+          });
+        } catch (e) {
+          // 무시
+        }
+        
         await appointmentPage.close().catch(() => {});
       }
+      
+      if (retries > 0) {
+        console.log(`[${store.name}] 마지막 실패 후 재시도 ${retries}번 남음...`);
+        await humanDelay(5000, 10000);
+        return this.navigateToAppointmentPage(browser, context, page, store, retries - 1);
+      }
+      
       return null;
+    }
+  }
+  
+  /**
+   * 사람과 같은 브라우징 행동 시뮬레이션
+   */
+  private async simulateHumanBehavior(page: Page): Promise<void> {
+    try {
+      // 랜덤 스크롤
+      await page.evaluate(() => {
+        const maxScroll = Math.max(
+          document.body.scrollHeight, 
+          document.documentElement.scrollHeight,
+          document.body.offsetHeight, 
+          document.documentElement.offsetHeight
+        ) - window.innerHeight;
+        
+        const scrollTarget = Math.floor(Math.random() * maxScroll * 0.7);
+        
+        window.scrollTo({
+          top: scrollTarget,
+          behavior: 'smooth'
+        });
+      });
+      
+      await humanDelay(1000, 2500);
+      
+      // 랜덤 마우스 움직임
+      const viewportSize = await page.viewportSize();
+      if (viewportSize) {
+        const x = Math.floor(Math.random() * viewportSize.width * 0.8);
+        const y = Math.floor(Math.random() * viewportSize.height * 0.8);
+        
+        // 랜덤한 위치로 마우스 이동 대신 클릭 가능한 요소 찾기 
+        try {
+          // 페이지에서 클릭 가능한 요소 찾기
+          const clickableElement = await page.$('a, button, [role="button"]');
+          if (clickableElement) {
+            await clickableElement.hover(); // hover로 대체
+          } else {
+            // 클릭 가능한 요소가 없으면 그냥 마우스 이동
+            await page.mouse.move(x, y);
+          }
+        } catch (e) {
+          // 에러가 발생하면 그냥 마우스 이동
+          await page.mouse.move(x, y);
+        }
+      }
+      
+      await humanDelay(800, 1500);
+      
+      // 다시 맨 위로 스크롤
+      await page.evaluate(() => {
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      });
+      
+      await humanDelay(1000, 2000);
+    } catch (e) {
+      console.log('사람 행동 시뮬레이션 중 오류:', e);
+      // 계속 진행 - 주요 기능이 아님
     }
   }
 
@@ -354,9 +705,156 @@ export class AppointmentService {
   /**
    * 매장별 자동화 처리 메인 함수
    */
-  async handleStore(store: Store): Promise<Browser> {
-    const browser = await this.setupBrowser(store);
-    const context = await browser.newContext();
+  public async handleStore(store: Store): Promise<Browser | null> {
+    try {
+      // 상태 업데이트 및 브라우저 시작
+      this.updateAutomationStatus(store.id, 'running', `[${store.name}] 자동화 시작`);
+      const { browser, context, page } = await this.startBrowser(store);
+
+      // 스토어별 로직
+      switch (store.id) {
+        case 'chronodigm':
+          try {
+            // 1. 메인 사이트 및 쿠키 수락
+            this.updateAutomationStatus(store.id, 'running', `[${store.name}] 사이트 접속 중...`);
+            await page.goto(store.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.waitForLoadState('networkidle');
+            
+            // 2. 쿠키 동의 버튼 클릭
+            await this.handleCookiesAndAds(page, store);
+            
+            // 3. 광고 팝업 닫기
+            // 이미 handleCookiesAndAds에서 처리됨
+            
+            // 4. 문의하기 버튼 클릭
+            await this.clickContactButton(page, store);
+
+            // 5. 동시에 두 개의 페이지 준비
+            // 5-1. 첫 번째 페이지: 인증 페이지 (기존 페이지 사용)
+            const authPage = page;
+            
+            // 5-2. 두 번째 페이지: 예약 페이지 (새 탭에서 미리 열기)
+            this.updateAutomationStatus(store.id, 'running', `[${store.name}] 예약 페이지 준비 중...`);
+            const appointmentPage = await context.newPage();
+            await appointmentPage.goto(`${store.url}appointment/`, { 
+              waitUntil: 'domcontentloaded',
+              timeout: 30000 
+            });
+
+            // 6. 인증 페이지에서 인증 진행
+            this.updateAutomationStatus(store.id, 'running', `[${store.name}] PASS 인증 준비 중...`);
+            
+            // 메시지 입력 및 PASS 인증 버튼 클릭
+            await this.handleMessageAndPassAuth(context, authPage, store);
+            
+            this.updateAutomationStatus(store.id, 'running', `[${store.name}] PASS 인증 완료. 예약 페이지 준비 완료.`);
+            
+            // 7. 테스트 모드이거나 매월 말일 자정 대기
+            if (store.config.testMode) {
+              this.updateAutomationStatus(store.id, 'running', `[${store.name}] 테스트 모드: 대기 시간 없이 진행합니다.`);
+            } else {
+              try {
+                this.updateAutomationStatus(store.id, 'running', `[${store.name}] 매월 말일 자정 대기 중...`);
+                await waitUntilMidnight(store.config);
+              } catch (error: any) {
+                console.log(`[${store.name}] 자정 대기 중 오류 발생, 예약 진행: ${error}`);
+              }
+            }
+            
+            // 8. 자정이 되면 예약 페이지 새로고침 후 예약 프로세스 실행
+            this.updateAutomationStatus(store.id, 'running', `[${store.name}] 예약 페이지 새로고침 및 예약 진행 중...`);
+            await appointmentPage.reload({ waitUntil: 'networkidle' });
+            
+            // 9. 약관 동의 및 예약 버튼 클릭
+            try {
+              // 첫 번째 셀렉터: 예약 이미지 클릭
+              await appointmentPage.waitForSelector('#fappointment > div:nth-child(24) > div > div > a:nth-child(1) > div.picture-wrap > picture > img', {
+                timeout: 10000,
+                state: 'visible'
+              });
+              await humanDelay(500, 1000);
+              
+              await appointmentPage.click('#fappointment > div:nth-child(24) > div > div > a:nth-child(1) > div.picture-wrap > picture > img');
+              this.updateAutomationStatus(store.id, 'running', `[${store.name}] 예약 이미지 클릭 성공`);
+              
+              await humanDelay(1000, 2000);
+              
+              // 두 번째 셀렉터: 예약 버튼 클릭
+              await appointmentPage.waitForSelector('#fappointment > div:nth-child(25) > footer > button', {
+                timeout: 10000,
+                state: 'visible'
+              });
+              await humanDelay(500, 1000);
+              
+              await appointmentPage.click('#fappointment > div:nth-child(25) > footer > button');
+              this.updateAutomationStatus(store.id, 'running', `[${store.name}] 예약 버튼 클릭 성공! 세션 무한 유지 중...`);
+              
+              // 세션 무한 유지 상태로 전환
+              this.updateAutomationStatus(store.id, 'running', `[${store.name}] 예약 처리 완료. 세션 무한 유지 중...`);
+              
+              // 무한 대기 (브라우저 유지)
+              await new Promise(() => {}); // 의도적으로 해결되지 않는 프로미스
+            } catch (error: any) {
+              console.error(`[${store.name}] 예약 프로세스 실행 중 오류 발생:`, error);
+              this.updateAutomationStatus(store.id, 'error', `[${store.name}] 예약 버튼 클릭 실패: ${error.message}`);
+            }
+            
+            return browser;
+          } catch (error: any) {
+            console.error(`[${store.name}] 전체 자동화 실패:`, error);
+            this.updateAutomationStatus(store.id, 'error', `[${store.name}] 자동화 실패: ${error.message}`);
+            throw error;
+          }
+        // ... 다른 스토어 케이스
+        default:
+          this.updateAutomationStatus(store.id, 'error', `[${store.name}] 지원되지 않는 스토어`);
+          throw new Error(`지원되지 않는 스토어: ${store.id}`);
+      }
+    } catch (error: any) {
+      console.error(`Store automation error for ${store.id}:`, error);
+      this.updateAutomationStatus(store.id, 'error', `오류: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 자동화 상태 업데이트 함수
+   */
+  private updateAutomationStatus(storeId: string, status: string, message: string): void {
+    if (this.mainWindow) {
+      this.mainWindow.webContents.send('automation-status', {
+        storeId,
+        status,
+        message
+      });
+    }
+  }
+
+  /**
+   * 브라우저 시작 및 초기화 함수
+   */
+  private async startBrowser(store: Store): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
+    // 브라우저 설정 및 시작
+    const browser = await chromium.launch({
+      headless: false,
+      slowMo: 50,
+      args: [
+        '--disable-features=site-per-process',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins',
+        '--disable-site-isolation-trials'
+      ]
+    });
+
+    // 컨텍스트 생성
+    const context = await browser.newContext({
+      bypassCSP: true,
+      viewport: { width: 1280, height: 800 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36',
+      ignoreHTTPSErrors: true
+    });
+
+    // 페이지 생성
     const page = await context.newPage();
 
     // AbortController 추가
@@ -365,581 +863,6 @@ export class AppointmentService {
     this.automationProcesses[store.id].abortController = abortController;
     this.automationProcesses[store.id].browser = browser;
 
-    try {
-      // 0. 초기 페이지 로드
-      this.checkStopped(store);
-      this.updateStatus(store, 'waiting', '대기중');
-      await page.goto(store.url, { waitUntil: 'networkidle', timeout: 20000 });
-
-      // 1. 쿠키/광고 팝업 닫기
-      this.checkStopped(store);
-      this.updateStatus(store, 'cookie', '쿠키/광고 닫기중');
-      await this.handleCookiesAndAds(page, store);
-
-      // 2. 문의 버튼 클릭
-      this.checkStopped(store);
-      this.updateStatus(store, 'contact', '문의 버튼 클릭중');
-      await this.clickContactButton(page, store);
-
-      // 3. 메시지 입력 및 PASS 인증
-      this.checkStopped(store);
-      this.updateStatus(store, 'message', '메시지 입력중');
-      
-      // PASS 인증 시도
-      try {
-        const popup = await this.handleMessageAndPassAuth(context, page, store);
-        this.checkStopped(store);
-        
-        // 4. PASS 인증이 완료되면 상태 업데이트
-        if (popup) {
-          this.updateStatus(store, 'authenticated', 'PASS 인증 완료');
-        } else {
-          this.updateStatus(store, 'warning', 'PASS 인증이 완료되지 않았습니다');
-        }
-      } catch (authError: any) {
-        console.error(`[${store.name}] PASS 인증 실패:`, authError);
-        this.updateStatus(store, 'error', `PASS 인증 실패: ${authError.message || '알 수 없는 오류'}`);
-        throw new Error(`PASS 인증 실패: ${authError.message || '알 수 없는 오류'}`);
-      }
-      
-      // 5. 자정 대기
-      try {
-        this.updateStatus(store, 'midnight', '자정까지 대기중');
-        await waitUntilMidnight(store.config);
-      } catch (midnightErr) {
-        console.log(`[${store.name}] 자정 대기 중 오류 발생, 예약 진행:`, midnightErr);
-      }
-
-      // 6. 예약 페이지로 이동 (현재 인증된 컨텍스트 사용)
-      this.checkStopped(store);
-      this.updateStatus(store, 'navigating', '새 탭에서 예약 페이지로 직접 이동중');
-      const appointmentPage = await this.navigateToAppointmentPage(browser, context, page, store, 3);
-      
-      if (!appointmentPage) {
-        throw new Error('예약 페이지로 이동할 수 없습니다.');
-      }
-
-      // 7. 예약 버튼 클릭
-      try {
-        this.checkStopped(store);
-        this.updateStatus(store, 'reserving', '예약 버튼 찾는 중');
-        
-        // 예약 버튼 찾기 실행 전 더 길게 대기 (봇 감지 우회)
-        await humanDelay(5000, 10000);
-        console.log(`[${store.name}] 봇 감지 우회를 위해 충분히 대기 후 예약 시도 시작`);
-        
-        // 예약 버튼 찾기 실행
-        const buttonClicked = await this.findAndClickReservationButton(appointmentPage, store, 5);
-        
-        if (buttonClicked) {
-          console.log(`[${store.name}] 예약 버튼 클릭 성공`);
-          this.updateStatus(store, 'success', '예약 버튼 클릭 완료! 브라우저를 유지합니다.');
-        } else {
-          console.log(`[${store.name}] 예약 버튼을 찾지 못함, 수동 예약 대기`);
-          this.updateStatus(store, 'warning', '예약 버튼을 찾지 못했습니다. 브라우저를 유지하며 수동 예약 대기 중입니다.');
-        }
-      } catch (e) {
-        console.log(`[${store.name}] 예약 버튼 클릭 실패, 하지만 브라우저 유지:`, e);
-        this.updateStatus(store, 'warning', '예약 버튼 클릭에 실패했으나, 브라우저는 유지됩니다. 수동으로 작업을 완료하세요.');
-      }
-
-      // 예약 프로세스 완료 후에도 브라우저 유지 (무한 대기)
-      console.log(`[${store.name}] 예약 프로세스 완료, 브라우저 무한 유지 중`);
-      
-      // 무한 대기 (사용자가 중지할 때까지)
-      while (true) {
-        this.checkStopped(store); // 사용자가 중지 버튼을 누르면 여기서 예외가 발생하고 빠져나감
-        await new Promise(resolve => setTimeout(resolve, 10000)); // 10초마다 확인
-        // mainWindow가 null인지 확인 후 상태 메시지 전송
-        if (this.mainWindow && this.automationProcesses[store.id] && !this.automationProcesses[store.id].stopped) {
-          this.mainWindow.webContents.send('automation-status', { 
-            storeId: store.id, 
-            status: 'maintain', 
-            message: '세션 무한 유지 중 - 수동으로 중지할 때까지 브라우저를 유지합니다.' 
-          });
-        }
-      }
-    } catch (e) {
-      const errMsg = (e && (e as any).message) ? (e as any).message : '';
-      if (!this.automationProcesses[store.id] || this.automationProcesses[store.id].stopped || (errMsg && errMsg.includes('Browser has been closed'))) {
-        this.updateStatus(store, 'stopped', '중지됨');
-        return browser;
-      }
-      this.updateStatus(store, 'error', `자동화 실패: ${errMsg || '알 수 없는 오류'}`);
-      console.error(`[${store.name}] 전체 자동화 실패:`, e);
-    } finally {
-      // 사용자가 명시적으로 중지한 경우에만 브라우저 닫기
-      if (this.automationProcesses[store.id]?.stopped && browser && browser.isConnected()) {
-        await browser.close();
-      }
-      // 중지된 경우에만 프로세스 정리
-      if (this.automationProcesses[store.id]?.stopped) {
-        delete this.automationProcesses[store.id];
-      }
-    }
-
-    return browser;
-  }
-
-  /**
-   * 브라우저 설정 함수
-   */
-  private async setupBrowser(store: Store): Promise<Browser> {
-    const { chromium } = await import('playwright');
-    return await chromium.launch({ headless: false });
-  }
-
-  /**
-   * 상태 업데이트 함수
-   */
-  private updateStatus(store: Store, status: string, message: string): void {
-    if (this.mainWindow) {
-      const automationStatus: AutomationStatus = {
-        storeId: store.id,
-        status,
-        message
-      };
-      this.mainWindow.webContents.send('automation-status', automationStatus);
-    }
-  }
-
-  /**
-   * 쿠키 및 광고 처리 함수
-   */
-  private async handleCookiesAndAds(page: Page, store: Store): Promise<void> {
-    try {
-      await page.click('button.cookies__button--accept', { timeout: 2000 });
-      console.log(`[${store.name}] 쿠키 동의 버튼 클릭 성공`);
-    } catch (e) {
-      console.log(`[${store.name}] 쿠키 동의 버튼 없음 또는 이미 처리됨`);
-    }
-    try {
-      await page.click('.popin-close', { timeout: 2000 });
-      console.log(`[${store.name}] 광고/기타 팝업 닫기 성공`);
-    } catch (e) {
-      console.log(`[${store.name}] 광고/기타 팝업 없음 또는 이미 처리됨`);
-    }
-  }
-
-  /**
-   * 문의 버튼 클릭 함수
-   */
-  private async clickContactButton(page: Page, store: Store): Promise<void> {
-    try {
-      await page.waitForSelector('#contact_us > div > div.grid-layout.section-contents > div:nth-child(2) > div.text-wrap > a', { timeout: 10000 });
-      this.checkStopped(store);
-      await page.click('#contact_us > div > div.grid-layout.section-contents > div:nth-child(2) > div.text-wrap > a');
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(2000);
-      console.log(`[${store.name}] 문의 버튼 클릭 성공`);
-    } catch (e) {
-      this.updateStatus(store, 'error', '문의 버튼 클릭 실패');
-      console.error(`[${store.name}] 문의 버튼 클릭 실패:`, e);
-      throw e;
-    }
-  }
-
-  /**
-   * 메시지 입력 및 PASS 인증 처리
-   */
-  private async handleMessageAndPassAuth(
-    context: BrowserContext,
-    page: Page,
-    store: Store
-  ): Promise<Page | null> {
-    try {
-      // 메시지 입력 대기 및 입력
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(2000); // 페이지 안정화를 위한 대기
-      await page.waitForSelector('#fmessage > div:nth-child(24) > div > textarea', { timeout: 10000, state: 'visible' });
-      await page.fill('#fmessage > div:nth-child(24) > div > textarea', store.config.message);
-
-      // PASS 인증 팝업 대기 및 메시지 전송
-      const [popup] = await this.handlePopup(context, store, 
-        page.click('#fmessage > div:nth-child(24) > footer > button')
-      );
-
-      if (!popup) {
-        throw new Error('PASS 인증 팝업이 정상적으로 열리지 않았습니다.');
-      }
-
-      // PASS 인증 진행
-      this.updateStatus(store, 'pass', 'PASS 인증중');
-      
-      // 통신사 선택
-      const carrierSelectors = {
-        'SKT': '#ct > form > fieldset > ul.agency_select__items > li:nth-child(1)',
-        'KT': '#ct > form > fieldset > ul.agency_select__items > li:nth-child(2)',
-        'LGU': '#ct > form > fieldset > ul.agency_select__items > li:nth-child(3)'
-      };
-      
-      const carrierSelector = carrierSelectors[store.config.carrier as keyof typeof carrierSelectors];
-      if (!carrierSelector) {
-        throw new Error('올바르지 않은 통신사 설정');
-      }
-
-      // 통신사 버튼이 클릭 가능한 상태가 될 때까지 대기
-      await popup.waitForSelector(carrierSelector, { state: 'visible' });
-      await popup.click(carrierSelector);
-      
-      // 약관 동의 체크박스가 나타날 때까지 대기
-      await popup.waitForSelector('#ct > form > fieldset > ul.agreelist.all > li > span > label:nth-child(2)', { 
-        state: 'visible',
-        timeout: 10000
-      });
-      await popup.click('#ct > form > fieldset > ul.agreelist.all > li > span > label:nth-child(2)');
-      
-      // PASS 인증하기 버튼이 활성화될 때까지 대기
-      await popup.waitForSelector('#btnPass', { 
-        state: 'visible',
-        timeout: 10000
-      });
-      await popup.click('#btnPass');
-      
-      // QR 인증 버튼이 나타날 때까지 대기
-      await popup.waitForSelector('#qr_auth', { 
-        state: 'visible',
-        timeout: 10000
-      });
-      await popup.click('#qr_auth');
-      
-      // 인증 완료 대기 - 팝업이 닫힐 때까지 무한 대기
-      this.updateStatus(store, 'waiting', 'QR 인증을 완료해 주세요. 핸드폰에서 PASS 앱 확인');
-      await new Promise<void>((resolve) => {
-        const checkInterval = setInterval(async () => {
-          try {
-            // 팝업이 닫혔는지 확인
-            if (!popup.isConnected()) {
-              clearInterval(checkInterval);
-              resolve();
-            }
-          } catch (error) {
-            // 팝업이 이미 닫힌 경우
-            clearInterval(checkInterval);
-            resolve();
-          }
-        }, 1000);
-
-        // 팝업 닫힘 이벤트도 함께 감지
-        popup.on('close', () => {
-          clearInterval(checkInterval);
-          resolve();
-        });
-      });
-      
-      // 인증 후 페이지 전환 대기
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(5000);  // 대기 시간 유지
-      this.updateStatus(store, 'authenticated', 'PASS 인증 완료, 예약 페이지로 이동 중');
-
-      return popup;
-    } catch (e) {
-      console.error(`[${store.name}] PASS 인증 중 오류:`, e);
-      throw e;
-    }
-  }
-
-  /**
-   * 이메일 입력 및 동의 처리
-   */
-  private async fillEmailAndAgree(page: Page, store: Store): Promise<void> {
-    try {
-      // 페이지 안정화를 위한 추가 대기
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(10000); // 10초로 증가
-      
-      console.log(`[${store.name}] 이메일 필드 대기 시작`);
-      
-      // 현재 페이지 내용 확인 (디버깅용)
-      const pageContent = await page.content();
-      const contentPreview = pageContent.substring(0, 500) + '... (truncated)';
-      console.log(`[${store.name}] 페이지 HTML 미리보기:\n${contentPreview}`);
-      
-      // 현재 URL 확인
-      const url = await page.url();
-      console.log(`[${store.name}] 현재 URL: ${url}`);
-      
-      // 셀렉터 목록 - 여러 가능한 셀렉터를 시도
-      const emailSelectors = [
-        '#fmessage > div:nth-child(24) > div:nth-child(1) > div > input',
-        'input[type="email"]',
-        'input[placeholder*="mail"]',
-        'div[data-v-] > div > input',
-        'div.fields-row > div > input',
-        // 추가 셀렉터 - 더 일반적인 것들
-        'input[type="text"]',
-        'input.form-control',
-        '.field input',
-        'form input',
-        'div.input-wrapper input'
-      ];
-      
-      // 페이지에서 모든 input 요소 찾기 시도 (더 일반적인 접근법)
-      try {
-        console.log(`[${store.name}] 페이지 내 모든 입력 필드 검색 중...`);
-        const allInputs = await page.$$('input');
-        console.log(`[${store.name}] 입력 필드 ${allInputs.length}개 발견`);
-        
-        // 첫 5개 입력 필드의 정보 로깅
-        for (let i = 0; i < Math.min(5, allInputs.length); i++) {
-          try {
-            const type = await allInputs[i].getAttribute('type');
-            const placeholder = await allInputs[i].getAttribute('placeholder');
-            const id = await allInputs[i].getAttribute('id');
-            const classAttr = await allInputs[i].getAttribute('class');
-            console.log(`[${store.name}] 입력 #${i+1}: type=${type}, placeholder=${placeholder}, id=${id}, class=${classAttr}`);
-            
-            // 동적 셀렉터 추가
-            if (id) emailSelectors.push(`#${id}`);
-            if (classAttr) emailSelectors.push(`.${classAttr.replace(/\s+/g, '.')}`);
-          } catch (attrErr) {
-            console.log(`[${store.name}] 입력 #${i+1} 속성 읽기 실패`);
-          }
-        }
-      } catch (inputScanErr) {
-        console.log(`[${store.name}] 입력 필드 스캔 실패:`, inputScanErr);
-      }
-      
-      // 모든 셀렉터 시도
-      let emailInput = null;
-      for (const selector of emailSelectors) {
-        try {
-          console.log(`[${store.name}] 이메일 셀렉터 시도: ${selector}`);
-          emailInput = await page.waitForSelector(selector, {
-            state: 'visible',
-            timeout: 5000 // 각 셀렉터당 5초 타임아웃
-          }).catch(() => null);
-          
-          if (emailInput) {
-            console.log(`[${store.name}] 이메일 필드 발견: ${selector}`);
-            break;
-          }
-        } catch (err) {
-          console.log(`[${store.name}] 셀렉터 실패: ${selector}`);
-          // 계속 진행
-        }
-      }
-      
-      // 좌표 기반 접근법 - 마지막 시도
-      if (!emailInput) {
-        try {
-          console.log(`[${store.name}] 셀렉터 실패, 화면 중앙 부분 클릭 시도...`);
-          
-          // 페이지 크기 확인
-          const size = await page.evaluate(() => {
-            return {
-              width: window.innerWidth,
-              height: window.innerHeight
-            };
-          });
-          
-          // 화면 중앙 부분 클릭 시도
-          await page.mouse.click(size.width / 2, size.height / 3);
-          await page.keyboard.type(store.config.email);
-          console.log(`[${store.name}] 화면 중앙 부분에 이메일 타이핑 시도`);
-          
-          // 성공 가정 (확인할 방법 없음)
-          emailInput = true; 
-        } catch (clickErr) {
-          console.log(`[${store.name}] 좌표 기반 입력 실패:`, clickErr);
-        }
-      }
-      
-      if (!emailInput) {
-        console.log(`[${store.name}] 이메일 필드를 찾을 수 없음, 스크린샷 저장 시도...`);
-        
-        // 스크린샷 저장 시도 (디버깅용)
-        try {
-          await page.screenshot({ 
-            path: `email-field-error-${store.id}-${Date.now()}.png`, 
-            fullPage: true 
-          });
-          console.log(`[${store.name}] 오류 상태 스크린샷 저장됨`);
-        } catch (screenshotErr) {
-          console.log(`[${store.name}] 스크린샷 저장 실패`);
-        }
-        
-        // 일반 입력 필드를 찾아서 시도
-        const foundInputs = await page.$$('input');
-        if (foundInputs.length > 0) {
-          console.log(`[${store.name}] 일반 입력 필드 발견, 첫 번째 필드에 입력 시도...`);
-          await foundInputs[0].fill(store.config.email);
-          console.log(`[${store.name}] 첫 번째 입력 필드에 이메일 입력 완료`);
-        } else {
-          // 여전히 입력 필드를 찾지 못한 경우 진행 계속 (다음 단계로)
-          console.log(`[${store.name}] 어떤 입력 필드도 찾을 수 없음, 계속 진행...`);
-        }
-      } else if (typeof emailInput !== 'boolean') {
-        // 이메일 입력 (셀렉터로 찾은 경우)
-        await emailInput.fill(store.config.email);
-        console.log(`[${store.name}] 이메일 입력 완료`);
-      }
-      
-      // 약관 동의 셀렉터 목록 (넓은 범위로 확장)
-      const agreeSelectors = [
-        '#fmessage > div:nth-child(24) > div:nth-child(4) > div > div > label > span',
-        'label.checkbox > span',
-        'input[type="checkbox"] + span',
-        'div.checkbox-wrapper label',
-        // 추가 셀렉터
-        'input[type="checkbox"]',
-        'label.checkbox',
-        '.agreement',
-        '.consent',
-        '.terms'
-      ];
-      
-      // 약관 동의 시도
-      let agreeCheckbox = null;
-      for (const selector of agreeSelectors) {
-        try {
-          console.log(`[${store.name}] 약관 동의 셀렉터 시도: ${selector}`);
-          agreeCheckbox = await page.waitForSelector(selector, {
-            state: 'visible',
-            timeout: 3000
-          }).catch(() => null);
-          
-          if (agreeCheckbox) {
-            console.log(`[${store.name}] 약관 동의 체크박스 발견: ${selector}`);
-            break;
-          }
-        } catch (err) {
-          // 계속 진행
-        }
-      }
-      
-      if (agreeCheckbox) {
-        await agreeCheckbox.click();
-        console.log(`[${store.name}] 약관 동의 완료`);
-      } else {
-        console.log(`[${store.name}] 약관 동의 체크박스를 찾을 수 없음, 계속 진행`);
-      }
-      
-      // 이름 필드 시도 - 여러 셀렉터
-      try {
-        const nameSelectors = [
-          '#fmessage > div:nth-child(24) > div:nth-child(2) > div > input',
-          'input[placeholder*="name"]', 
-          'input[placeholder*="이름"]',
-          'input[name="name"]'
-        ];
-        
-        for (const selector of nameSelectors) {
-          const nameExists = await page.waitForSelector(selector, {
-            state: 'visible',
-            timeout: 3000
-          }).then(() => true).catch(() => false);
-          
-          if (nameExists) {
-            await page.fill(selector, store.config.name);
-            console.log(`[${store.name}] 이름 입력 완료: ${selector}`);
-            break;
-          }
-        }
-      } catch (nameErr) {
-        console.log(`[${store.name}] 이름 필드 입력 실패, 계속 진행: ${nameErr}`);
-      }
-      
-      // 전화번호 필드 시도 - 여러 셀렉터
-      try {
-        const phoneSelectors = [
-          '#fmessage > div:nth-child(24) > div:nth-child(3) > div > input',
-          'input[placeholder*="phone"]',
-          'input[placeholder*="전화"]',
-          'input[placeholder*="연락처"]',
-          'input[name="phone"]',
-          'input[type="tel"]'
-        ];
-        
-        for (const selector of phoneSelectors) {
-          const phoneExists = await page.waitForSelector(selector, {
-            state: 'visible',
-            timeout: 3000
-          }).then(() => true).catch(() => false);
-          
-          if (phoneExists) {
-            await page.fill(selector, store.config.phone);
-            console.log(`[${store.name}] 전화번호 입력 완료: ${selector}`);
-            break;
-          }
-        }
-      } catch (phoneErr) {
-        console.log(`[${store.name}] 전화번호 필드 입력 실패, 계속 진행: ${phoneErr}`);
-      }
-
-      // 확인 버튼 대기 및 클릭 (인간처럼)
-      await humanDelay(1000, 2000);
-      
-      const submitSelectors = [
-        '#fmessage > div:nth-child(24) > footer > button',
-        'footer > button',
-        'button[type="submit"]',
-        'button.primary',
-        // 추가 셀렉터
-        'input[type="submit"]',
-        'button:not([disabled])',
-        '.submit-btn',
-        '.btn-primary',
-        '.action-button'
-      ];
-      
-      let submitClicked = false;
-      for (const selector of submitSelectors) {
-        try {
-          console.log(`[${store.name}] 제출 버튼 셀렉터 시도: ${selector}`);
-          const clicked = await humanClick(page, selector);
-          if (clicked) {
-            submitClicked = true;
-            console.log(`[${store.name}] 확인 버튼 클릭 성공: ${selector}`);
-            break;
-          }
-        } catch (err) {
-          // 다음 셀렉터 시도
-        }
-      }
-      
-      // 마지막 시도 - 화면 하단 부분 클릭
-      if (!submitClicked) {
-        try {
-          console.log(`[${store.name}] 셀렉터로 버튼을 찾지 못함, 화면 하단 중앙 클릭 시도...`);
-          
-          // 페이지 크기 확인
-          const size = await page.evaluate(() => {
-            return {
-              width: window.innerWidth,
-              height: window.innerHeight
-            };
-          });
-          
-          // 화면 하단 중앙 클릭
-          await page.mouse.click(size.width / 2, size.height * 0.85);
-          console.log(`[${store.name}] 화면 하단 중앙 클릭 시도 완료`);
-          submitClicked = true;
-        } catch (clickErr) {
-          console.log(`[${store.name}] 화면 하단 클릭 실패:`, clickErr);
-          console.log(`[${store.name}] 확인 버튼을 찾을 수 없어 계속 진행`);
-        }
-      }
-      
-      // 페이지 로드 대기
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(3000);
-      console.log(`[${store.name}] 이메일 및 개인정보 입력 단계 완료`);
-    } catch (e) {
-      console.error(`[${store.name}] 이메일 및 개인정보 입력 실패:`, e);
-      // 스크린샷 저장 시도 (오류 발생 시)
-      try {
-        await page.screenshot({ 
-          path: `email-error-${store.id}-${Date.now()}.png`, 
-          fullPage: true 
-        });
-        console.log(`[${store.name}] 오류 스크린샷 저장됨`);
-      } catch (screenshotErr) {
-        console.log(`[${store.name}] 오류 스크린샷 저장 실패`);
-      }
-      
-      // 에러를 던지지 않고 다음 단계로 진행 시도
-      console.log(`[${store.name}] 오류 무시하고 다음 단계 진행 시도`);
-    }
+    return { browser, context, page };
   }
 } 

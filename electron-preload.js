@@ -1,6 +1,9 @@
 // Electron preload 스크립트
 const { contextBridge, ipcRenderer } = require('electron');
-const { timeSync } = require('./utils/timeSync.cjs');
+const path = require('path');
+// 절대 경로를 사용하여 timeSync 모듈 로드
+const timeSyncPath = path.join(__dirname, 'utils/timeSync.cjs');
+const { timeSync } = require(timeSyncPath);
 
 // 렌더러 프로세스에 안전하게 노출할 API 정의
 contextBridge.exposeInMainWorld('electronAPI', {

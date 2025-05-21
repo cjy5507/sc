@@ -29,7 +29,17 @@ class TimeSync extends EventEmitter {
     if (this._timer) return;
     const run = async () => {
       try {
-        const networkTime = await this.fetchNetworkTime();
+        // 전체 타임아웃 5초 설정
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('시간 동기화 시간 초과')), 5000);
+        });
+        
+        // fetchNetworkTime과 타임아웃 중 먼저 완료되는 것 선택
+        const networkTime = await Promise.race([
+          this.fetchNetworkTime(),
+          timeoutPromise
+        ]);
+        
         const localTime = new Date();
         const offset = networkTime.getTime() - localTime.getTime();
         const synced = Math.abs(offset) < thresholdMs;
@@ -40,9 +50,11 @@ class TimeSync extends EventEmitter {
         };
         this.emit('update', this._status);
       } catch (error) {
+        console.warn('시간 동기화 실패:', error.message);
         this._status = {
           ...this._status,
-          error: error.message || String(error)
+          error: error.message || String(error),
+          synced: false
         };
         this.emit('error', this._status.error);
       }
@@ -72,7 +84,7 @@ class TimeSync extends EventEmitter {
 
   fetchNetworkTime() {
     return new Promise((resolve, reject) => {
-      https
+      const request = https
         .get('https://worldtimeapi.org/api/timezone/Asia/Seoul', (res) => {
           if (res.statusCode !== 200) {
             console.error('시간 동기화 API 상태 코드 오류:', res.statusCode);
@@ -96,6 +108,13 @@ class TimeSync extends EventEmitter {
           console.error('시간 동기화 네트워크 오류:', err);
           resolve(new Date()); // 에러 시 로컬 시간 반환
         });
+        
+      // 요청에 3초 타임아웃 설정
+      request.setTimeout(3000, () => {
+        console.error('시간 동기화 요청 타임아웃');
+        request.destroy();
+        resolve(new Date()); // 타임아웃 시 로컬 시간 반환
+      });
     });
   }
 }

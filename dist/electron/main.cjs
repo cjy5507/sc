@@ -6,12 +6,37 @@ const path = require('path');
 const isDev = process.env.NODE_ENV === 'development' ||
     process.env.NODE_ENV === undefined ||
     /electron/.test(process.execPath);
-// 디버깅을 위해 import 시도
+// timeSync 모듈 로드 - 여러 가능한 경로 시도
 let timeSync;
 try {
-    const timeSyncModule = require('./utils/timeSync');
-    timeSync = timeSyncModule.timeSync;
-    console.log('timeSync 모듈 로드 성공:', timeSync);
+    // 가능한 경로 목록
+    const possiblePaths = [
+        './utils/timeSync.cjs',
+        './timeSync.cjs',
+        '../electron/utils/timeSync.cjs',
+        '../electron/timeSync.cjs',
+        './utils/timeSync',
+        './timeSync'
+    ];
+    // 각 경로 시도
+    let loaded = false;
+    for (const modulePath of possiblePaths) {
+        try {
+            console.log(`timeSync 모듈 로드 시도: ${modulePath}`);
+            const module = require(modulePath);
+            timeSync = module.timeSync;
+            console.log(`timeSync 모듈 로드 성공: ${modulePath}`);
+            loaded = true;
+            break;
+        }
+        catch (err) {
+            // 이 경로 실패, 다음 경로 시도
+            console.log(`${modulePath} 경로 로드 실패`);
+        }
+    }
+    if (!loaded) {
+        throw new Error('모든 가능한 경로에서 timeSync 모듈을 찾을 수 없음');
+    }
 }
 catch (err) {
     console.error('timeSync 모듈 로드 실패:', err);
@@ -240,14 +265,24 @@ app.whenReady().then(async () => {
     });
     // Wait for app to initialize
     try {
-        await Promise.all([
-            timeSync.syncTime().catch((err) => console.error('Time sync error:', err)),
-            app.whenReady()
+        // 시간 동기화 실행 (타임아웃 설정)
+        console.log('시간 동기화 시작...');
+        const syncPromise = timeSync.syncTime().catch(err => {
+            console.error('Time sync error (무시):', err);
+            return Promise.resolve(); // 에러가 발생해도 계속 진행
+        });
+        // 최대 6초 대기 (타임아웃 설정)
+        await Promise.race([
+            syncPromise,
+            new Promise(resolve => setTimeout(() => {
+                console.log('시간 동기화 타임아웃 (6초), 앱 실행 계속 진행');
+                resolve();
+            }, 6000))
         ]);
-        console.log('시간 동기화 완료');
+        console.log('시간 동기화 완료 또는 타임아웃');
     }
     catch (err) {
-        console.error('시간 동기화 중 오류 발생:', err);
+        console.error('앱 초기화 중 오류 발생 (무시하고 계속):', err);
     }
     // Create window after sync
     createWindow();

@@ -1,25 +1,19 @@
-import { Config } from '../types';
+import { StoreConfig } from '../types';
 
 /**
  * 자정까지 대기하는 함수
  */
-export async function waitUntilMidnight(config: Config): Promise<void> {
+export async function waitUntilMidnight(config: StoreConfig): Promise<void> {
   const now = new Date();
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const isLastDayOfMonth = now.getDate() === lastDayOfMonth.getDate();
   
-  // 테스트 모드일 경우 매월 말일 체크를 건너뜁니다.
+  // 테스트 모드일 경우 대기 시간을 짧게 유지
   if (config.testMode) {
     console.log('테스트 모드: 자정 대기를 10초로 단축합니다.');
     await new Promise(resolve => setTimeout(resolve, 10000)); // 테스트 모드에서는 10초만 대기
     return;
   }
   
-  // 말일 체크 완전히 제거 (개발 중에는 매일 테스트 가능하도록)
-  // if (!isLastDayOfMonth) {
-  //   throw new Error('매월 말일에만 예약이 가능합니다.');
-  // }
-
+  // 자정 계산 및 대기
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const timeUntilMidnight = midnight.getTime() - now.getTime();
   
@@ -30,9 +24,49 @@ export async function waitUntilMidnight(config: Config): Promise<void> {
 }
 
 /**
- * 인간과 같은 딜레이를 시뮬레이션
+ * 지정된 범위 내에서 랜덤한 시간만큼 대기하는 함수
+ * @param minMs 최소 대기 시간 (ms)
+ * @param maxMs 최대 대기 시간 (ms)
+ * @returns Promise<void>
  */
-export async function humanDelay(min = 500, max = 2000): Promise<void> {
-  const delay = Math.floor(Math.random() * (max - min + 1)) + min;
-  await new Promise(resolve => setTimeout(resolve, delay));
+export async function humanDelay(minMs = 500, maxMs = 1000): Promise<void> {
+  const delay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+  return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+/**
+ * 현재 시간이 매월 말일인지 확인하는 함수
+ * @returns boolean
+ */
+export function isLastDayOfMonth(): boolean {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  // 내일이 다음 달의 1일이면 오늘은 이번 달의 마지막 날
+  return tomorrow.getDate() === 1;
+}
+
+/**
+ * 현재 시간이 자정(00:00:00)에 근접한지 확인하는 함수
+ * @param thresholdSeconds 자정으로부터의 임계값(초)
+ * @returns boolean
+ */
+export function isNearMidnight(thresholdSeconds = 5): boolean {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  
+  // 자정 또는 자정에 가까운 시간인지 확인
+  if (hours === 0 && minutes === 0 && seconds < thresholdSeconds) {
+    return true;
+  }
+  
+  // 자정 직전인지 확인 (23:59:xx)
+  if (hours === 23 && minutes === 59 && seconds > (60 - thresholdSeconds)) {
+    return true;
+  }
+  
+  return false;
 } 
