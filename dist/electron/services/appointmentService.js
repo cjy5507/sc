@@ -262,10 +262,10 @@ class AppointmentService {
             this.checkStopped(store);
             this.updateStatus(store, 'message', '메시지 입력중');
             const popup = await this.handleMessageAndPassAuth(context, page, store);
-            // 4. 이메일 입력
+            
+            // 4. 인증 완료 후 바로 예약 페이지로 이동 (이메일 입력 단계 생략)
             this.checkStopped(store);
-            this.updateStatus(store, 'email', '이메일 입력중');
-            await this.fillEmailAndAgree(page, store);
+            
             // 5. 자정 대기
             try {
                 this.updateStatus(store, 'midnight', '자정까지 대기중');
@@ -276,7 +276,7 @@ class AppointmentService {
             }
             // 6. 예약 페이지로 이동
             this.checkStopped(store);
-            this.updateStatus(store, 'navigating', '예약 페이지로 이동중');
+            this.updateStatus(store, 'navigating', '새 탭에서 예약 페이지로 직접 이동중');
             const appointmentPage = await this.navigateToAppointmentPage(browser, context, page, store, 3);
             if (!appointmentPage) {
                 throw new Error('예약 페이지로 이동할 수 없습니다.');
@@ -314,7 +314,7 @@ class AppointmentService {
                     this.mainWindow.webContents.send('automation-status', {
                         storeId: store.id,
                         status: 'maintain',
-                        message: '세션 유지 중 - 수동으로 중지할 때까지 브라우저를 유지합니다.'
+                        message: '세션 무한 유지 중 - 수동으로 중지할 때까지 브라우저를 유지합니다.'
                     });
                 }
             }
@@ -474,48 +474,6 @@ class AppointmentService {
         }
         catch (e) {
             console.error(`[${store.name}] PASS 인증 중 오류:`, e);
-            throw e;
-        }
-    }
-    /**
-     * 이메일 입력 및 동의 처리
-     */
-    async fillEmailAndAgree(page, store) {
-        try {
-            // 이메일 필드 대기 및 입력
-            await page.waitForSelector('#fmessage > div:nth-child(24) > div:nth-child(1) > div > input', {
-                state: 'visible',
-                timeout: 10000
-            });
-            await page.fill('#fmessage > div:nth-child(24) > div:nth-child(1) > div > input', store.config.email);
-            // 약관 동의 체크박스 대기 및 클릭
-            await page.waitForSelector('#fmessage > div:nth-child(24) > div:nth-child(4) > div > div > label > span', {
-                state: 'visible',
-                timeout: 10000
-            });
-            await page.click('#fmessage > div:nth-child(24) > div:nth-child(4) > div > div > label > span');
-            // 이름 필드 대기 및 입력
-            await page.waitForSelector('#fmessage > div:nth-child(24) > div:nth-child(2) > div > input', {
-                state: 'visible',
-                timeout: 5000
-            });
-            await page.fill('#fmessage > div:nth-child(24) > div:nth-child(2) > div > input', store.config.name);
-            // 전화번호 필드 대기 및 입력
-            await page.waitForSelector('#fmessage > div:nth-child(24) > div:nth-child(3) > div > input', {
-                state: 'visible',
-                timeout: 5000
-            });
-            await page.fill('#fmessage > div:nth-child(24) > div:nth-child(3) > div > input', store.config.phone);
-            // 확인 버튼 대기 및 클릭 (인간처럼)
-            await (0, timeUtils_2.humanDelay)(1000, 2000);
-            await (0, botDetectionAvoidance_1.humanClick)(page, '#fmessage > div:nth-child(24) > footer > button');
-            // 페이지 로드 대기
-            await page.waitForLoadState('networkidle');
-            await page.waitForTimeout(3000);
-            console.log(`[${store.name}] 이메일 및 개인정보 입력 완료`);
-        }
-        catch (e) {
-            console.error(`[${store.name}] 이메일 및 개인정보 입력 실패:`, e);
             throw e;
         }
     }
