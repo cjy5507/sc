@@ -13,6 +13,9 @@ const srcElectronDir = join(rootDir, 'electron');
 fs.removeSync(distDir);
 fs.ensureDirSync(distElectronDir);
 
+// 리소스 디렉토리 생성
+fs.ensureDirSync(join(distElectronDir, 'resources'));
+
 // Compile TypeScript files
 console.log('Compiling TypeScript files...');
 try {
@@ -22,18 +25,26 @@ try {
   // Compile TypeScript with specific config
   execSync('npx tsc -p tsconfig.electron.json', { stdio: 'inherit' });
   
-  // Copy package.json with proper main field
+  // package.json 처리 - CommonJS 모드로 설정
   const packageJson = JSON.parse(fs.readFileSync(join(rootDir, 'package.json'), 'utf-8'));
   const electronPackageJson = {
     ...packageJson,
     main: 'main.cjs',
-    type: 'commonjs' // Force CommonJS for Electron main process
+    type: 'commonjs'
   };
   
   fs.writeFileSync(
     join(distElectronDir, 'package.json'),
     JSON.stringify(electronPackageJson, null, 2)
   );
+  
+  // 이름 변경: main.js -> main.cjs 
+  if (fs.existsSync(join(distElectronDir, 'main.js'))) {
+    fs.renameSync(
+      join(distElectronDir, 'main.js'),
+      join(distElectronDir, 'main.cjs')
+    );
+  }
   
   console.log('Successfully compiled TypeScript files');
 } catch (error) {
@@ -44,15 +55,37 @@ try {
 // Copy static files from electron directory
 console.log('Copying static files...');
 try {
-  // Copy all files except .ts files
+  // HTML 파일과 기타 리소스 복사
+  fs.copyFileSync(
+    join(srcElectronDir, 'index.html'),
+    join(distElectronDir, 'index.html')
+  );
+  
+  // resources 디렉토리가 있으면 복사
+  const resourcesSrcDir = join(srcElectronDir, 'resources');
+  const resourcesDestDir = join(distElectronDir, 'resources');
+  
+  if (fs.existsSync(resourcesSrcDir)) {
+    fs.copySync(resourcesSrcDir, resourcesDestDir, { overwrite: true });
+  }
+  
+  // utils 디렉토리 복사 (CommonJS 모듈 유지)
+  const utilsSrcDir = join(srcElectronDir, 'utils');
+  const utilsDestDir = join(distElectronDir, 'utils');
+  
+  if (fs.existsSync(utilsSrcDir)) {
+    fs.copySync(utilsSrcDir, utilsDestDir, { overwrite: true });
+  }
+  
+  // 기타 필요한 비-TypeScript 파일 복사
   const files = fs.readdirSync(srcElectronDir);
   files.forEach(file => {
-    if (!file.endsWith('.ts')) {
+    if (!file.endsWith('.ts') && !['node_modules', 'dist'].includes(file)) {
       const srcPath = join(srcElectronDir, file);
       const destPath = join(distElectronDir, file);
       if (fs.lstatSync(srcPath).isDirectory()) {
         fs.copySync(srcPath, destPath, { overwrite: true });
-      } else {
+      } else if (!fs.existsSync(destPath)) {
         fs.copyFileSync(srcPath, destPath);
       }
     }

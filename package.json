@@ -21,6 +21,7 @@
     "build:electron-win": "npm run electron:build-main-win && npm run dev:electron:build-preload && npm run dev:electron:copy-utils",
     "electron:build-win": "npm run build:electron-win && electron-builder --win",
     "electron:build-win-run": "npm run electron:build-win && start release\\Rolex Reserve Pro Setup.exe",
+    "start:with-next": "cross-env NODE_ENV=development npm run build:electron-win && concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && npx electron dist\\electron\\main.cjs\"",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
@@ -98,15 +99,15 @@
         "nsis",
         "zip"
       ],
-      "icon": "assets/icon.ico"
+      "icon": "electron/resources/icon.ico"
     },
     "directories": {
-      "buildResources": "assets",
+      "buildResources": "electron/resources",
       "output": "release"
     },
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "out/**/*"
     ],
     "asar": true,
     "extraMetadata": {

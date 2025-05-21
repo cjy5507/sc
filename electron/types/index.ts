@@ -20,4 +20,16 @@ export interface AutomationProcess {
   stopped: boolean;
   browser: any;
   abortController: AbortController;
+}
+
+export interface AutomationStatus {
+  storeId: string;
+  status: string;
+  message: string;
+}
+
+export interface AutomationResult {
+  success: boolean;
+  data?: any;
+  error?: string;
 } 

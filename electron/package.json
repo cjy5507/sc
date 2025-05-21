@@ -2,16 +2,20 @@
   "name": "rolex-automation",
   "version": "1.0.0",
   "description": "Rolex Automation App",
-  "main": "dist/main.js",
+  "main": "./dist/main.js",
   "scripts": {
     "start": "tsc && electron .",
-    "dev": "concurrently \"tsc -w\" \"wait-on tcp:3000 && electron .\"",
+    "dev": "concurrently \"tsc -w\" \"electron .\"",
+    "dev:next": "cd .. && npm run dev",
     "build": "tsc && electron-builder",
     "build:dev": "tsc && electron-builder --publish never",
     "watch": "tsc -w",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "build:all": "npm run build && cd electron && npm run build"
+    "build:all": "tsc && electron-builder",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "start:with-next": "concurrently \"cd .. && npm run dev\" \"wait-on http://localhost:3000 && npm run start\""
   },
   "keywords": [
     "rolex",
@@ -21,6 +25,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "dotenv": "^16.3.1",
     "electron-log": "^5.0.0-beta.16",
     "electron-updater": "^6.1.7",
     "playwright": "^1.42.1"
@@ -30,6 +35,7 @@
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
     "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "electron": "^28.1.0",
     "electron-builder": "^24.9.1",
     "eslint": "^8.56.0",
@@ -45,31 +51,45 @@
     "productName": "Rolex Automation",
     "copyright": "Copyright © 2024",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "resources"
     },
     "files": [
       "dist/**/*",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "index.html"
     ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "resources/icon.ico"
+    },
     "mac": {
       "category": "public.app-category.utilities",
       "target": [
         "dmg",
         "zip"
-      ]
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
+      ],
+      "icon": "resources/icon.icns"
     },
     "linux": {
       "target": [
         "AppImage",
         "deb"
-      ]
+      ],
+      "icon": "resources/icon.png"
     },
     "publish": [
       {

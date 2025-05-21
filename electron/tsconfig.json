@@ -6,14 +6,15 @@
     "esModuleInterop": true,
     "strict": true,
     "sourceMap": true,
-    "outDir": "../dist/electron",
+    "outDir": "./dist",
     "rootDir": ".",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "types": ["node"],
     "typeRoots": [
-      "../node_modules/@types"
+      "../node_modules/@types",
+      "./node_modules/@types"
     ],
     "baseUrl": ".",
     "paths": {

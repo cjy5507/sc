@@ -1,12 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export', // 정적 내보내기 활성화
-  distDir: 'out', // 빌드 출력 디렉토리 설정
+  reactStrictMode: true,
+  // Next.js와 Electron 통합을 위한 경로 설정
+  output: 'export', // 정적 HTML로 내보내기 (Electron과 함께 사용)
+  distDir: 'out', // 정적 빌드 출력 디렉토리 이름
   images: {
-    unoptimized: true, // 정적 내보내기 시 이미지 최적화 비활성화
+    unoptimized: true, // Electron에서는 이미지 최적화 불필요
   },
-  // basePath: '/rolex', // 필요시 basePath 설정
-  // assetPrefix: './', // 상대 경로로 에셋 로드
+  // 개발 서버를 위한 설정
+  assetPrefix: process.env.NODE_ENV === 'production' ? './' : undefined,
   eslint: {
     ignoreDuringBuilds: true,
   },
