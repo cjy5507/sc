@@ -20,5 +20,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         const listener = (_event, err) => callback(err);
         electron_1.ipcRenderer.on('time-sync-error', listener);
         return () => electron_1.ipcRenderer.removeListener('time-sync-error', listener);
-    }
+    },
+    closeMainWindow: () => electron_1.ipcRenderer.send('close-main-window')
 });

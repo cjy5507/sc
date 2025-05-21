@@ -48,28 +48,6 @@ export class ChronodimePage extends BasePage {
   }
 
   /**
-   * 매장 방문 목적 선택
-   * @param purpose 방문 목적 (예: '시계 구매', 'A/S 문의' 등)
-   */
-  async selectPurpose(purpose: string) {
-    await this.navigate();
-    
-    // 페이지 로드 대기
-    await this.page.waitForSelector(this.selectors.purposeCard, { state: 'visible' });
-    
-    // 방문 목적 카드 클릭
-    const purposeCard = await this.page.$(this.selectors.purposeCard);
-    if (!purposeCard) {
-      throw new Error('방문 목적 카드를 찾을 수 없습니다.');
-    }
-    
-    await purposeCard.click();
-    
-    // 다음 단계로 넘어가는 대기
-    await this.page.waitForSelector(this.selectors.datePicker, { state: 'visible' });
-  }
-
-  /**
    * 예약 날짜 선택
    * @param date YYYY-MM-DD 형식의 날짜
    */
@@ -154,7 +132,6 @@ export class ChronodimePage extends BasePage {
     }
   ) {
     try {
-      await this.selectPurpose(purpose);
       await this.selectDate(date);
       await this.selectTime(time);
       return await this.submitReservation(userInfo);

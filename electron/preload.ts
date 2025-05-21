@@ -9,6 +9,7 @@ declare global {
       onAutomationStatus: (callback: (status: { storeId: string; status: string; message?: string }) => void) => void;
       onTimeSyncUpdate: (callback: (status: any) => void) => void;
       onTimeSyncError: (callback: (err: any) => void) => void;
+      closeMainWindow: () => void;
     };
   }
 }
@@ -32,5 +33,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event: any, err: any) => callback(err);
     ipcRenderer.on('time-sync-error', listener);
     return () => ipcRenderer.removeListener('time-sync-error', listener);
-  }
+  },
+  closeMainWindow: () => ipcRenderer.send('close-main-window')
 });

@@ -1,6 +1,6 @@
 <context>
 # Overview  
-RolexReserve Pro는 롤렉스 시계 예약을 자동화하는 Windows 데스크톱 애플리케이션입니다. 매월 말일 자정에 오픈되는 롤렉스 예약을 여러 매장에서 동시에 자동으로 진행하여 사용자의 예약 성공 확률을 높입니다.
+RolexReserve Pro는 롤렉스 시계 예약을 자동화하는 Windows 데스크톱 애플리케이션입니다. 매월 말일일 자정에 오픈되는 롤렉스 예약을 여러 매장에서 동시에 자동으로 진행하여 사용자의 예약 성공 확률을 높입니다.
 
 # Core Features  
 1. 다중 매장 동시 예약 자동화
@@ -166,11 +166,6 @@ RolexReserve Pro는 롤렉스 시계 예약을 자동화하는 Windows 데스크
    롯데 서면 (홍보시계): https://www.hongbowatch.co.kr/rolex/contact-busan/appointment/
    ```
 
-2. 매장별 DOM 구조
-   - 크로노다임: `.fappointment .purpose-card`
-   - 우노와치: `.booking-wrapper .booking-option`
-   - 현대시계: `.appointment-section .appointment-choice`
-   - 홍보시계: `.booking-container .booking-card`
 
 3. 시스템 요구사항
    - CPU: 쿼드코어 2.5GHz 이상

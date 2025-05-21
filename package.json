@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "main": "dist/electron/main.cjs",
-  "type": "module",
+  "type": "commonjs",
   "exports": {
     ".": "./dist/electron/main.cjs"
   },
@@ -16,6 +16,11 @@
     "electron:build-main": "tsc electron/main.ts --outDir dist/electron --module commonjs --target es2020 && mv dist/electron/main.js dist/electron/main.cjs",
     "build:electron": "npm run electron:build-main && npm run dev:electron:build-preload && npm run dev:electron:copy-utils",
     "electron:dev": "npm run build:electron && concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && npx electron dist/electron/main.cjs\"",
+    "electron:dev-win": "npm run build:electron-win && concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && npx electron dist\\electron\\main.cjs\"",
+    "electron:build-main-win": "tsc electron/main.ts --outDir dist/electron --module commonjs --target es2020 && move dist\\electron\\main.js dist\\electron\\main.cjs",
+    "build:electron-win": "npm run electron:build-main-win && npm run dev:electron:build-preload && npm run dev:electron:copy-utils",
+    "electron:build-win": "npm run build:electron-win && electron-builder --win",
+    "electron:build-win-run": "npm run electron:build-win && start release\\Rolex Reserve Pro Setup.exe",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",

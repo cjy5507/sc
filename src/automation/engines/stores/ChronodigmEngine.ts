@@ -5,7 +5,6 @@ import { AutomationResult, StoreConfig } from '../../types/automation.types';
 export class ChronodigmEngine extends BaseAutomationEngine {
   private static readonly SELECTORS = {
     // 크로노다임 매장의 실제 DOM 요소 선택자들로 업데이트 필요
-    PURPOSE_SELECTION: '.fappointment .purpose-card',
     DATE_PICKER: 'input[type="date"]',
     TIME_SLOT: '.time-slot',
     NAME_INPUT: 'input[name="name"]',
@@ -72,11 +71,7 @@ export class ChronodigmEngine extends BaseAutomationEngine {
     
     try {
       // 목적 선택 (예: 롤렉스 시계 구매 상담)
-      const purposeCard = await this.page.$(ChronodigmEngine.SELECTORS.PURPOSE_SELECTION);
-      if (purposeCard) {
-        await purposeCard.click();
-        await this.waitForRandomDelay();
-      }
+      // PURPOSE_SELECTION: '.fappointment .purpose-card', // purpose-card 관련 코드 완전 삭제
     } catch (error) {
       console.error('Error selecting purpose:', error);
       throw error;

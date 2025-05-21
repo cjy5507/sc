@@ -129,7 +129,6 @@ export interface IClientStore {
   displayName: string;
   url: string;
   selectors: {
-    purposeCard: string;
     dateSelector: string;
     timeSelector: string;
     agreementCheckbox: string;
