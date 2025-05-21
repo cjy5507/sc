@@ -250,9 +250,16 @@ export class AppointmentService {
           appointmentPage = await newContext.newPage();
         }
 
-        // 예약 페이지로 직접 이동
+        // 예약 페이지로 직접 이동 - 타임아웃 증가 및 waitUntil 설정 변경
         console.log(`[${store.name}] 새 탭에서 직접 예약 페이지로 이동 중...`);
-        await appointmentPage.goto(`${store.url}appointment/`, { waitUntil: 'networkidle', timeout: 30000 });
+        await appointmentPage.goto(`${store.url}appointment/`, { 
+          waitUntil: 'load', // 'networkidle' 대신 'load' 사용
+          timeout: 60000 // 타임아웃 60초로 증가
+        });
+        
+        // 추가 대기 시간
+        console.log(`[${store.name}] 페이지 로드 후 추가 대기 중...`);
+        await appointmentPage.waitForTimeout(5000);
         
         // 페이지가 제대로 로드됐는지 확인
         try {
@@ -266,16 +273,58 @@ export class AppointmentService {
           }
           console.log(`[${store.name}] 현재 페이지 URL: ${currentUrl}`);
           
-          if (currentUrl === 'about:blank' || !currentUrl.includes('appointment')) {
+          if (currentUrl === 'about:blank') {
+            console.log(`[${store.name}] 빈 페이지 로드됨 (${currentUrl}), 새로고침 시도...`);
+            
+            // 새로고침 시도
+            try {
+              await appointmentPage.goto(`${store.url}appointment/`, { 
+                waitUntil: 'domcontentloaded', 
+                timeout: 30000 
+              });
+              await appointmentPage.waitForTimeout(3000);
+              currentUrl = await appointmentPage.url();
+              
+              // 새로고침 후에도 about:blank인 경우
+              if (currentUrl === 'about:blank' || !currentUrl.includes('appointment')) {
+                console.log(`[${store.name}] 새로고침 후에도 문제가 지속됨, 재시도...`);
+                continue;
+              }
+            } catch (reloadErr) {
+              console.log(`[${store.name}] 새로고침 시도 실패:`, reloadErr);
+              continue;
+            }
+          } else if (!currentUrl.includes('appointment')) {
             console.log(`[${store.name}] 잘못된 URL로 로드됨 (${currentUrl}), 재시도...`);
             continue; // 다음 시도로 넘어감
           }
+          
+          // 페이지 콘텐츠 확인 (HTML에서 특정 문자열이 있는지 확인)
+          const pageContent = await appointmentPage.content();
+          if (!pageContent.includes('rolex') && !pageContent.includes('appointment')) {
+            console.log(`[${store.name}] 페이지 콘텐츠 확인 실패, 재시도...`);
+            continue;
+          }
+          
+          // 페이지에 특정 요소가 있는지 확인
+          const hasContent = await appointmentPage.evaluate(() => {
+            // 페이지에 의미 있는 콘텐츠가 있는지 확인
+            const bodyContent = document.body.innerText;
+            return bodyContent.length > 100; // 최소한의 콘텐츠가 있어야 함
+          }).catch(() => false);
+          
+          if (!hasContent) {
+            console.log(`[${store.name}] 페이지에 충분한 콘텐츠가 없음, 재시도...`);
+            continue;
+          }
+          
         } catch (urlErr) {
           console.log(`[${store.name}] URL 확인 중 오류:`, urlErr);
           continue;
         }
         
         // 페이지가 올바르게 로드되었으면 반환
+        console.log(`[${store.name}] 예약 페이지 로드 성공!`);
         return appointmentPage;
       } catch (err) {
         console.log(`[${store.name}] 예약 페이지 이동 실패 (시도 ${attempt}/${retries}):`, err);

@@ -15,10 +15,10 @@ export async function waitUntilMidnight(config: Config): Promise<void> {
     return;
   }
   
-  // 테스트 모드가 아닐 경우에만 말일 체크
-  if (!isLastDayOfMonth) {
-    throw new Error('매월 말일에만 예약이 가능합니다.');
-  }
+  // 말일 체크 완전히 제거 (개발 중에는 매일 테스트 가능하도록)
+  // if (!isLastDayOfMonth) {
+  //   throw new Error('매월 말일에만 예약이 가능합니다.');
+  // }
 
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const timeUntilMidnight = midnight.getTime() - now.getTime();
