@@ -235,127 +235,106 @@ export class AppointmentService {
     console.log(`[${store.name}] 예약 페이지 URL: ${store.url}appointment/`);
     let appointmentPage: Page | null = null;
     
-    for (let attempt = 1; attempt <= retries; attempt++) {
+    const targetUrl = `${store.url}appointment/`;
+    
+    // 현재 페이지가 이미 인증을 완료한 페이지인지 확인
+    const currentUrl = await page.url();
+    console.log(`[${store.name}] 현재 인증 완료 페이지 URL: ${currentUrl}`);
+    
+    // 현재 컨텍스트에 새 페이지 생성
+    try {
+      console.log(`[${store.name}] 인증된 컨텍스트에서 새 탭 열기`);
+      appointmentPage = await context.newPage();
+      
+      // 사람이 URL을 직접 입력하는 것처럼 시뮬레이션
+      console.log(`[${store.name}] 사람처럼 URL 입력 시작...`);
+      
+      // 빈 페이지에서 시작
+      await appointmentPage.goto('about:blank', { timeout: 10000 });
+      
+      // 포커스 설정 및 URL 바에 입력
+      await appointmentPage.evaluate(() => {
+        // 주소창에 포커스를 시뮬레이션
+        const focusEvent = new FocusEvent('focus');
+        document.dispatchEvent(focusEvent);
+      });
+      
+      // 잠시 대기 (사람처럼)
+      await appointmentPage.waitForTimeout(1000);
+      
+      // 한 글자씩 입력 (사람처럼)
+      const urlChars = targetUrl.split('');
+      for (const char of urlChars) {
+        await appointmentPage.keyboard.type(char, { delay: Math.random() * 100 + 50 });
+      }
+      
+      // 엔터 키 누르기
+      await appointmentPage.waitForTimeout(500);
+      console.log(`[${store.name}] 입력 완료, 엔터 누르기`);
+      await appointmentPage.keyboard.press('Enter');
+      
+      // 페이지 로드 대기
+      console.log(`[${store.name}] 페이지 로딩 대기 중...`);
+      await appointmentPage.waitForLoadState('load', { timeout: 60000 });
+      await appointmentPage.waitForTimeout(5000);
+      
+      // 페이지가 제대로 로드됐는지 확인
+      let currentPageUrl = '';
       try {
-        // 3가지 다른 방법으로 시도
-        if (attempt === 1) {
-          console.log(`[${store.name}] 예약 페이지로 이동 시도 #1: context.newPage()`);
-          appointmentPage = await context.newPage();
-        } else if (attempt === 2) {
-          console.log(`[${store.name}] 예약 페이지로 이동 시도 #2: browser.newPage()`);
-          appointmentPage = await browser.newPage();
-        } else {
-          console.log(`[${store.name}] 예약 페이지로 이동 시도 #3: 새 컨텍스트 생성`);
-          const newContext = await browser.newContext();
-          appointmentPage = await newContext.newPage();
-        }
-
-        // 예약 페이지로 직접 이동 - 타임아웃 증가 및 waitUntil 설정 변경
-        console.log(`[${store.name}] 새 탭에서 직접 예약 페이지로 이동 중...`);
-        await appointmentPage.goto(`${store.url}appointment/`, { 
-          waitUntil: 'load', // 'networkidle' 대신 'load' 사용
-          timeout: 60000 // 타임아웃 60초로 증가
-        });
+        currentPageUrl = await appointmentPage.url();
+        console.log(`[${store.name}] 현재 페이지 URL: ${currentPageUrl}`);
         
-        // 추가 대기 시간
-        console.log(`[${store.name}] 페이지 로드 후 추가 대기 중...`);
-        await appointmentPage.waitForTimeout(5000);
-        
-        // 페이지가 제대로 로드됐는지 확인
-        try {
-          // URL 확인 - catch 메서드 사용하지 않고 try-catch로 감싸기
-          let currentUrl = '';
-          try {
-            currentUrl = await appointmentPage.url();
-          } catch (err) {
-            console.log(`[${store.name}] URL 가져오기 실패:`, err);
-            continue;
+        if (currentPageUrl === 'about:blank' || !currentPageUrl.includes('appointment')) {
+          console.log(`[${store.name}] 유효하지 않은 URL로 로드됨 (${currentPageUrl}), 재시도...`);
+          
+          // 다시 시도: 직접 goto 메소드 사용
+          console.log(`[${store.name}] goto 메소드로 직접 이동 시도`);
+          await appointmentPage.goto(targetUrl, { waitUntil: 'load', timeout: 30000 });
+          await appointmentPage.waitForTimeout(3000);
+          
+          currentPageUrl = await appointmentPage.url();
+          if (currentPageUrl === 'about:blank' || !currentPageUrl.includes('appointment')) {
+            throw new Error(`예약 페이지로 이동 실패: ${currentPageUrl}`);
           }
-          console.log(`[${store.name}] 현재 페이지 URL: ${currentUrl}`);
-          
-          if (currentUrl === 'about:blank') {
-            console.log(`[${store.name}] 빈 페이지 로드됨 (${currentUrl}), 새로고침 시도...`);
-            
-            // 새로고침 시도
-            try {
-              await appointmentPage.goto(`${store.url}appointment/`, { 
-                waitUntil: 'domcontentloaded', 
-                timeout: 30000 
-              });
-              await appointmentPage.waitForTimeout(3000);
-              currentUrl = await appointmentPage.url();
-              
-              // 새로고침 후에도 about:blank인 경우
-              if (currentUrl === 'about:blank' || !currentUrl.includes('appointment')) {
-                console.log(`[${store.name}] 새로고침 후에도 문제가 지속됨, 재시도...`);
-                continue;
-              }
-            } catch (reloadErr) {
-              console.log(`[${store.name}] 새로고침 시도 실패:`, reloadErr);
-              continue;
-            }
-          } else if (!currentUrl.includes('appointment')) {
-            console.log(`[${store.name}] 잘못된 URL로 로드됨 (${currentUrl}), 재시도...`);
-            continue; // 다음 시도로 넘어감
-          }
-          
-          // 페이지 콘텐츠 확인 (HTML에서 특정 문자열이 있는지 확인)
-          const pageContent = await appointmentPage.content();
-          if (!pageContent.includes('rolex') && !pageContent.includes('appointment')) {
-            console.log(`[${store.name}] 페이지 콘텐츠 확인 실패, 재시도...`);
-            continue;
-          }
-          
-          // 페이지에 특정 요소가 있는지 확인
-          const hasContent = await appointmentPage.evaluate(() => {
-            // 페이지에 의미 있는 콘텐츠가 있는지 확인
-            const bodyContent = document.body.innerText;
-            return bodyContent.length > 100; // 최소한의 콘텐츠가 있어야 함
-          }).catch(() => false);
-          
-          if (!hasContent) {
-            console.log(`[${store.name}] 페이지에 충분한 콘텐츠가 없음, 재시도...`);
-            continue;
-          }
-          
-        } catch (urlErr) {
-          console.log(`[${store.name}] URL 확인 중 오류:`, urlErr);
-          continue;
         }
         
-        // 페이지가 올바르게 로드되었으면 반환
+        // 페이지 콘텐츠 확인
+        const pageContent = await appointmentPage.content();
+        const hasRolexContent = pageContent.includes('rolex') || pageContent.includes('appointment');
+        
+        if (!hasRolexContent) {
+          console.log(`[${store.name}] 페이지 콘텐츠에 필요한 요소가 없음`);
+          throw new Error('페이지 콘텐츠 검증 실패');
+        }
+        
         console.log(`[${store.name}] 예약 페이지 로드 성공!`);
         return appointmentPage;
       } catch (err) {
-        console.log(`[${store.name}] 예약 페이지 이동 실패 (시도 ${attempt}/${retries}):`, err);
+        console.log(`[${store.name}] 페이지 검증 실패:`, err);
         
-        // 실패한 페이지 닫기
-        if (appointmentPage) {
-          try {
-            // 페이지가 이미 닫혔는지 확인
-            let isClosed = true;
-            try {
-              isClosed = await appointmentPage.isClosed();
-            } catch (e) {
-              console.log(`[${store.name}] 페이지 상태 확인 오류:`, e);
-            }
-            
-            if (!isClosed) {
-              try {
-                await appointmentPage.close();
-              } catch (e) {
-                console.log(`[${store.name}] 페이지 닫기 실패:`, e);
-              }
-            }
-          } catch (closeErr) {
-            console.log(`[${store.name}] 페이지 닫기 중 오류:`, closeErr);
-          }
+        // 페이지 스크린샷 저장 (디버깅용)
+        try {
+          await appointmentPage.screenshot({ 
+            path: `navigation-error-${store.id}-${Date.now()}.png`,
+            fullPage: true 
+          });
+          console.log(`[${store.name}] 오류 화면 스크린샷 저장됨`);
+        } catch (e) {
+          console.log(`[${store.name}] 스크린샷 저장 실패:`, e);
         }
+        
+        // 페이지 닫기
+        await appointmentPage.close().catch(() => {});
+        return null;
       }
+    } catch (err) {
+      console.error(`[${store.name}] 예약 페이지 이동 중 오류:`, err);
+      
+      if (appointmentPage && !appointmentPage.isClosed()) {
+        await appointmentPage.close().catch(() => {});
+      }
+      return null;
     }
-    
-    console.log(`[${store.name}] 모든 시도 실패, 예약 페이지로 이동할 수 없음`);
-    return null;
   }
 
   /**
@@ -405,10 +384,23 @@ export class AppointmentService {
       // 3. 메시지 입력 및 PASS 인증
       this.checkStopped(store);
       this.updateStatus(store, 'message', '메시지 입력중');
-      const popup = await this.handleMessageAndPassAuth(context, page, store);
-
-      // 4. 인증 완료 후 바로 예약 페이지로 이동 (이메일 입력 단계 생략)
-      this.checkStopped(store);
+      
+      // PASS 인증 시도
+      try {
+        const popup = await this.handleMessageAndPassAuth(context, page, store);
+        this.checkStopped(store);
+        
+        // 4. PASS 인증이 완료되면 상태 업데이트
+        if (popup) {
+          this.updateStatus(store, 'authenticated', 'PASS 인증 완료');
+        } else {
+          this.updateStatus(store, 'warning', 'PASS 인증이 완료되지 않았습니다');
+        }
+      } catch (authError: any) {
+        console.error(`[${store.name}] PASS 인증 실패:`, authError);
+        this.updateStatus(store, 'error', `PASS 인증 실패: ${authError.message || '알 수 없는 오류'}`);
+        throw new Error(`PASS 인증 실패: ${authError.message || '알 수 없는 오류'}`);
+      }
       
       // 5. 자정 대기
       try {
@@ -418,7 +410,7 @@ export class AppointmentService {
         console.log(`[${store.name}] 자정 대기 중 오류 발생, 예약 진행:`, midnightErr);
       }
 
-      // 6. 바로 예약 페이지로 이동
+      // 6. 예약 페이지로 이동 (현재 인증된 컨텍스트 사용)
       this.checkStopped(store);
       this.updateStatus(store, 'navigating', '새 탭에서 예약 페이지로 직접 이동중');
       const appointmentPage = await this.navigateToAppointmentPage(browser, context, page, store, 3);
@@ -612,6 +604,7 @@ export class AppointmentService {
       await popup.click('#qr_auth');
       
       // 인증 완료 대기 - 팝업이 닫힐 때까지 무한 대기
+      this.updateStatus(store, 'waiting', 'QR 인증을 완료해 주세요. 핸드폰에서 PASS 앱 확인');
       await new Promise<void>((resolve) => {
         const checkInterval = setInterval(async () => {
           try {
@@ -637,6 +630,7 @@ export class AppointmentService {
       // 인증 후 페이지 전환 대기
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(5000);  // 대기 시간 유지
+      this.updateStatus(store, 'authenticated', 'PASS 인증 완료, 예약 페이지로 이동 중');
 
       return popup;
     } catch (e) {
