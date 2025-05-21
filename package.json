@@ -2,32 +2,24 @@
   "name": "rolex-reserve-pro",
   "version": "0.1.0",
   "private": true,
-  "main": "./dist/electron/main.cjs",
+  "main": "dist/electron/main.cjs",
   "type": "module",
   "exports": {
     ".": "./dist/electron/main.cjs"
   },
   "scripts": {
-    "build": "next build",
-    "copy-utils": "node scripts/copy-utils.cjs",
     "dev": "next dev -p 3000",
-    "build:electron": "rimraf dist && tsc -p tsconfig.electron.json && npm run dev:electron:build-preload && npm run copy-utils && node build-electron.js",
-    "build:full": "npm run build && npm run build:electron",
-    "export": "next build",
+    "build": "next build",
     "start": "next start",
-    "electron": "cross-env NODE_ENV=production electron dist/electron/main.cjs",
     "dev:electron:copy-utils": "node scripts/copy-utils.cjs",
     "dev:electron:build-preload": "tsc electron/preload.ts --outDir dist/electron --module commonjs --target es2020",
-    "electron:dev": "npm run dev:electron:copy-utils && npm run dev:electron:build-preload && concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build:full && electron-builder",
-    "electron:package": "npm run build:full && electron-builder build --mac --arm64 --x64=false",
-    "postinstall": "electron-builder install-app-deps",
+    "electron:build-main": "tsc electron/main.ts --outDir dist/electron --module commonjs --target es2020 && mv dist/electron/main.js dist/electron/main.cjs",
+    "build:electron": "npm run electron:build-main && npm run dev:electron:build-preload && npm run dev:electron:copy-utils",
+    "electron:dev": "npm run build:electron && concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && npx electron dist/electron/main.cjs\"",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx db/seed.ts",
-    "reserve": "tsx scripts/startReservation.ts",
-    "reserve:interactive": "tsx scripts/startReservation.ts interactive"
+    "db:seed": "tsx db/seed.ts"
   },
   "bin": {
     "rolex-reserve": "./scripts/startReservation.ts"
@@ -113,7 +105,7 @@
     ],
     "asar": true,
     "extraMetadata": {
-      "main": "dist/electron/main.js"
+      "main": "dist/electron/main.cjs"
     }
   }
 }

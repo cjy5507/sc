@@ -1,11 +1,12 @@
 // Electron preload 스크립트
 const { contextBridge, ipcRenderer } = require('electron');
+const path = require('path');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
   // Automation
-  startAutomation: (storeConfig) => ipcRenderer.invoke('start-automation', storeConfig),
+  startAutomation: (params) => ipcRenderer.invoke('start-automation', params),
   
   // Reservation
   startReservation: (config) => ipcRenderer.invoke('start-reservation', config),
@@ -59,3 +60,5 @@ if (process.env.NODE_ENV === 'development') {
     process: process
   });
 }
+
+console.log('preload path:', path.join(__dirname, 'preload.js'));

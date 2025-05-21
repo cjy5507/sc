@@ -4,6 +4,10 @@ const { timeSync } = require('./utils/timeSync.cjs');
 
 // 렌더러 프로세스에 안전하게 노출할 API 정의
 contextBridge.exposeInMainWorld('electronAPI', {
+  console: {
+    log: (...args) => console.log(...args),
+    error: (...args) => console.error(...args),
+  },
   // 자동화 시작 함수
   startAutomation: (storeConfig) => {
     return new Promise((resolve) => {

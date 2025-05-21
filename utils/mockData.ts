@@ -1,7 +1,7 @@
 /**
  * 개발 및 테스트용 목업 데이터
  */
-import { IClientStore, IUser, IReservationProfile } from '../types';
+import { IClientStore, IUser, IReservationProfile } from '../types/index';
 
 // 매장 목업 데이터
 export const stores: IClientStore[] = [

@@ -1,6 +1,6 @@
 // 기본 Electron 모듈 가져오기
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, contextBridge, ipcRenderer } = require('electron');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require('path');
 
@@ -20,8 +20,13 @@ function createWindow() {
     }
   });
 
-  // Next.js 개발 서버 로드
-  mainWindow.loadURL('http://localhost:3000');
+  // 개발/프로덕션 분기
+  const isDev = process.env.NODE_ENV === 'development';
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:3000');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../../out/index.html'));
+  }
   
   // 개발자 도구 열기
   //mainWindow.webContents.openDevTools();
@@ -57,4 +62,11 @@ app.on('activate', function() {
 
 ipcMain.on('close-window', () => {
   if (mainWindow) mainWindow.close();
+});
+
+contextBridge.exposeInMainWorld('electron', {
+  ipcRenderer: {
+    send: (channel, data) => ipcRenderer.send(channel, data),
+    on: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(...args))
+  }
 });

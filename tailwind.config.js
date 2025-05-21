@@ -76,4 +76,7 @@ module.exports = {
     },
   },
   plugins: [require("tailwindcss-animate")],
+  experimental: {
+    contentSecurityPolicy: true
+  }
 }

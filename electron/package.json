@@ -10,18 +10,22 @@
     "build:dev": "tsc && electron-builder --publish never",
     "watch": "tsc -w",
     "lint": "eslint . --ext .ts,.tsx",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "build:all": "npm run build && cd electron && npm run build"
   },
-  "keywords": ["rolex", "automation", "electron"],
+  "keywords": [
+    "rolex",
+    "automation",
+    "electron"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "playwright": "^1.42.1",
+    "electron-log": "^5.0.0-beta.16",
     "electron-updater": "^6.1.7",
-    "electron-log": "^5.0.0-beta.16"
+    "playwright": "^1.42.1"
   },
   "devDependencies": {
-    "@types/electron": "^1.6.10",
     "@types/node": "^20.11.19",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
@@ -50,13 +54,22 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb"]
+      "target": [
+        "AppImage",
+        "deb"
+      ]
     },
     "publish": [
       {

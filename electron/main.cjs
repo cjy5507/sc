@@ -1,10 +1,10 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
-const path = require('path');
-const electronIsDev = require('electron-is-dev');
+import { app, BrowserWindow, ipcMain, session } from 'electron';
+import path from 'path';
+import electronIsDev from 'electron-is-dev';
 // const { ReservationScheduler } = require('../src/services/reservationScheduler');
 // const StoreModule = require('electron-store');
 // const Store = StoreModule.default || StoreModule;
-const { chromium } = require('playwright');
+import { chromium } from 'playwright';
 // Use absolute path for timeSync.cjs
 const timeSyncPath = path.join(__dirname, '../utils/timeSync.cjs');
 const { timeSync } = require(timeSyncPath);
@@ -72,13 +72,13 @@ function createWindow() {
   const startUrl = isDev
     ? 'http://localhost:3000'
     : `file://${path.resolve(__dirname, '../../out/index.html')}`;
-    
+
   mainWindow.loadURL(startUrl);
-  
+
   // Show window when page is ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    
+
     // Open DevTools in development mode
     if (isDev) {
       mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -87,19 +87,19 @@ function createWindow() {
 
   // Initialize scheduler
   // initializeScheduler();
-  
+
   // Handle window closed
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-  
+
   // Handle app activation (macOS)
   mainWindow.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
-  
+
   // Handle web contents events
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.error('Failed to load:', errorDescription);
@@ -111,28 +111,55 @@ function setupIpcHandlers() {
   console.log('setupIpcHandlers called');
   // Automation
   ipcMain.handle('start-automation', async (event, params) => {
+    console.log('start-automation called', params);
     const { stores } = params;
     if (!Array.isArray(stores)) return { success: false, error: 'Invalid stores format' };
     const results = [];
     for (const storeId of stores) {
       if (!automationProcesses[storeId]) {
-        // 병렬 실행: runAutomation에 storeId만 넘기고, 내부에서 인스턴스 저장
-        runAutomation(storeId);
+        // Find the store by ID
+        const store = STORES.find(s => s.name === storeId);
+        if (store) {
+          // Create a new process entry
+          automationProcesses[storeId] = { stopped: false };
+          // Start the automation in a separate async function
+          (async () => {
+            try {
+              automationProcesses[storeId].browser = await handleStore(store);
+              if (mainWindow && !automationProcesses[storeId].stopped) {
+                mainWindow.webContents.send('automation-status', {
+                  storeId,
+                  status: 'completed',
+                  message: '자동화 완료'
+                });
+              }
+            } catch (error) {
+              console.error(`Automation error for ${storeId}:`, error);
+              if (mainWindow && !automationProcesses[storeId].stopped) {
+                mainWindow.webContents.send('automation-status', {
+                  storeId,
+                  status: 'error',
+                  message: `오류: ${error.message || '알 수 없는 오류'}`
+                });
+              }
+            }
+          })();
+        }
       }
       results.push({ storeId, status: 'running', message: '자동화 시작' });
     }
     return { success: true, data: results };
   });
-  
+
   // Reservation
   // ipcMain.handle('start-reservation', async (event, config) => { ... });
   // ipcMain.handle('stop-reservation', async () => { ... });
   // ipcMain.handle('get-reservation-status', () => { ... });
-  
+
   // Settings
   // ipcMain.handle('save-settings', async (event, settings) => { ... });
   // ipcMain.handle('load-settings', async () => { ... });
-  
+
   // Auth
   // ipcMain.handle('login', async (event, credentials) => { ... });
   // ipcMain.handle('logout', async () => { ... });
@@ -165,15 +192,15 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') {
     app.setName('Rolex Reservation Client');
   }
-  
+
   // Set app user model ID for Windows
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.rolex.reservation.client');
   }
-  
+
   // Disable hardware acceleration for better compatibility
   // app.disableHardwareAcceleration();
-  
+
   // Set up session
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
@@ -190,13 +217,13 @@ app.whenReady().then(() => {
       }
     });
   });
-  
+
   // Set up IPC handlers
   setupIpcHandlers();
-  
+
   // Create the window
   createWindow();
-  
+
   // Initialize scheduler
   // initializeScheduler();
 
@@ -339,6 +366,7 @@ async function main() {
   await Promise.all(STORES.map(store => handleStore(store)));
 }
 
-main();
+// Commented out to prevent automatic execution on startup
+// main();
 // 기존 runAutomation 등은 주석 처리
 // async function runAutomation(storeId) { /* ... */ }

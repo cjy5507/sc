@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { toast } from 'sonner';
 import { TimeSyncIndicator } from "../../../components/TimeSyncIndicator";
 
-type StoreStatus = 'idle' | 'running' | 'error' | 'success' | 'waiting_auth' | 'waiting' | 'stopped';
+type StoreStatus = 'idle' | 'running' | 'error' | 'success' | 'waiting_auth' | 'waiting' | 'stopped' | 'cookie' | 'contact' | 'typing' | 'submitting' | 'pass' | 'pass-done';
 
 interface StoreConfig {
   id: string;
@@ -42,6 +42,11 @@ const STORES: StoreConfig[] = [
     url: 'https://www.hongbowatch.co.kr/rolex/contact-busan/appointment/',
     selector: '.booking-container .booking-card'
   }
+];
+
+// 진행 중 상태 목록 추가
+const IN_PROGRESS_STATUSES: StoreStatus[] = [
+  'running', 'waiting', 'waiting_auth', 'cookie', 'contact', 'typing', 'submitting', 'pass', 'pass-done'
 ];
 
 export function AutomationControl() {
@@ -311,7 +316,7 @@ export function AutomationControl() {
           <div className="space-y-4">
             {STORES.map((store) => {
               const storeStatus = status[store.id]?.status || 'idle';
-              const isStoreRunning = storeStatus === 'running' || storeStatus === 'waiting';
+              const isStoreRunning = IN_PROGRESS_STATUSES.includes(storeStatus);
               return (
                 <div
                   key={store.id}
