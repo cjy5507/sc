@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
-import { automationApi } from '@/lib/api';
+import { automationApi } from '@/src/lib/api';
 
 interface AutomationContextType {
   isRunning: boolean;

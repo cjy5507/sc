@@ -1,62 +1,88 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
-const path = require('path');
+import { app, BrowserWindow, ipcMain, session } from 'electron';
+import { Browser as PlaywrightBrowser } from 'playwright';
+import path from 'path';
 // electron-is-dev 대신 직접 isDev 로직 구현
 const isDev = process.env.NODE_ENV === 'development' ||
               process.env.NODE_ENV === undefined ||
               /electron/.test(process.execPath);
 
-// timeSync 모듈 로드 - 여러 가능한 경로 시도
-let timeSync;
+// timeSync 변수 선언 추가
+let timeSync: { syncTime: () => Promise<void> };
+
+// timeSync 모듈 로드 수정
 try {
-  // 가능한 경로 목록
-  const possiblePaths = [
-    './utils/timeSync.cjs',
-    './timeSync.cjs',
-    '../electron/utils/timeSync.cjs',
-    '../electron/timeSync.cjs',
-    './utils/timeSync',
-    './timeSync'
-  ];
-  
-  // 각 경로 시도
-  let loaded = false;
-  for (const modulePath of possiblePaths) {
-    try {
-      console.log(`timeSync 모듈 로드 시도: ${modulePath}`);
-      const module = require(modulePath);
-      timeSync = module.timeSync;
-      console.log(`timeSync 모듈 로드 성공: ${modulePath}`);
-      loaded = true;
-      break;
-    } catch (err) {
-      // 이 경로 실패, 다음 경로 시도
-      console.log(`${modulePath} 경로 로드 실패`);
-    }
-  }
-  
-  if (!loaded) {
-    throw new Error('모든 가능한 경로에서 timeSync 모듈을 찾을 수 없음');
-  }
-} catch (err) {
-  console.error('timeSync 모듈 로드 실패:', err);
-  // 임시 대체 객체 생성
+  // 명시적인 경로로 변경
+  const timeSyncModule = require('./utils/timeSync.cjs');
+  timeSync = timeSyncModule.timeSync;
+  console.log('timeSync 모듈이 성공적으로 로드되었습니다.');
+} catch (error) {
+  console.error('timeSync 모듈 로드 실패:', error);
+  // 에러가 발생해도 계속 진행할 수 있도록 기본 구현 제공
   timeSync = {
     syncTime: async () => {
-      console.log('더미 timeSync.syncTime 실행됨');
+      console.warn('기본 timeSync.syncTime 구현이 사용됨');
       return Promise.resolve();
     }
   };
 }
 
+// 타입 import 수정
+// AppointmentService와 STORES를 모듈을 require로 불러오도록 변경
 const { AppointmentService } = require('./services/appointmentService');
 const { STORES } = require('./stores');
-import { AutomationProcess, AutomationStatus, AutomationResult } from './types';
+import { Store, AutomationStatus, AutomationResult } from './types';
+import { MidnightReservationService } from './services/midnightReservationService';
 
-require('dotenv').config();
+// 타입 정의
+interface AutomationProcessMap {
+  [key: string]: AutomationProcess & {
+    browser?: PlaywrightBrowser | null;
+  };
+}
 
-let mainWindow = null;
-let reservationScheduler = null;
-const automationProcesses = {};
+interface ReservationScheduler {
+  stop: () => Promise<void>;
+}
+
+// 변수 선언
+let mainWindow: BrowserWindow | null = null;
+let reservationScheduler: { stop?: () => Promise<void> } = {};
+const automationProcesses: AutomationProcessMap = {};
+let midnightReservationService: MidnightReservationService | null = null;
+
+// 프로세스 상태 관리를 위한 객체
+interface ProcessState {
+  name: string;
+  status: 'idle' | 'running' | 'stopped' | 'error';
+}
+
+// 자동화 프로세스 객체 타입 - define locally instead of importing
+interface AutomationProcess {
+  browser: any;
+  context: any;
+  page: any;
+  stopped: boolean;
+  abortController: AbortController | null;
+  currentRetry: number;
+  lastActionTime: number;
+}
+
+// 프로세스 상태 초기화
+const processState: ProcessState = {
+  name: '',
+  status: 'idle'
+};
+
+// 자동화 프로세스 초기화
+let automation: AutomationProcess = {
+  browser: null,
+  context: null,
+  page: null,
+  stopped: false,
+  abortController: null,
+  currentRetry: 0,
+  lastActionTime: 0
+};
 
 // Create the main window
 function createWindow() {
@@ -85,7 +111,7 @@ function createWindow() {
   console.log('현재 환경:', isDev ? 'development' : 'production');
 
   // 개발 서버 연결 시도 후 실패 시 로컬 HTML 파일로 대체
-  mainWindow.loadURL(startUrl).catch((err) => {
+  mainWindow.loadURL(startUrl).catch((err: Error) => {
     console.log('개발 서버 연결 실패, 로컬 파일 로드 시도', err);
     const fallbackPath = isDev
       ? path.resolve(__dirname, '../index.html')
@@ -94,17 +120,17 @@ function createWindow() {
     console.log('대체 HTML 경로:', fallbackPath);
     
     // 로컬 HTML 파일 로드
-    mainWindow?.loadFile(fallbackPath).catch((err) => {
+    mainWindow?.loadFile(fallbackPath).catch((err: Error) => {
       console.error('로컬 파일 로드 실패:', err);
     });
   });
 
   // Show window when page is ready
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    mainWindow?.show();
 
     // Open DevTools in development mode
-    if (isDev) {
+    if (isDev && mainWindow) {
       mainWindow.webContents.openDevTools({ mode: 'detach' });
     }
   });
@@ -115,7 +141,7 @@ function createWindow() {
   });
 
   // Handle web contents events
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+  mainWindow.webContents.on('did-fail-load', (event: any, errorCode: number, errorDescription: string) => {
     console.error('Failed to load:', errorDescription);
   });
 }
@@ -130,111 +156,257 @@ function setupIpcHandlers() {
     automationProcesses
   });
   
+  // 자정 예약 서비스 인스턴스 생성
+  midnightReservationService = new MidnightReservationService(
+    mainWindow,
+    automationProcesses as any // 타입 호환성 이슈 해결
+  );
+  
   // Automation
-  ipcMain.handle('start-automation', async (event, params) => {
+  ipcMain.handle('start-automation', async (event: any, params: any) => {
     console.log('start-automation called', params);
-    const { stores } = params;
-    if (!Array.isArray(stores)) {
+    const { stores: storeIdsToStart } = params; // 파라미터명 변경으로 명확성 확보
+    if (!Array.isArray(storeIdsToStart)) {
       return { success: false, error: 'Invalid stores format' };
     }
-    const results = [];
+    const results: Array<{storeId: string, success: boolean, message: string, browserId?: string}> = [];
 
-    await Promise.all(stores.map(async (storeId) => {
-      // 기존 프로세스가 있으면 강제 종료 및 삭제
-      const prev = automationProcesses[storeId];
-      if (prev && prev.browser) {
-        try { await prev.browser.close(); } catch {}
+    // Promise.all 대신 for...of 루프를 사용하여 순차적으로 또는 병렬(제어된) 실행 고려
+    // 여기서는 각 매장 자동화를 독립적으로 시도하고 결과를 집계합니다.
+    for (const storeId of storeIdsToStart) {
+      console.log(`[${storeId}] 자동화 처리 시작`);
+
+      // 기존 프로세스 정리 (더 안전하게)
+      if (automationProcesses[storeId]) {
+        console.log(`[${storeId}] 기존 자동화 프로세스 정리 시도`);
+        try {
+          if (automationProcesses[storeId].browser && typeof automationProcesses[storeId].browser.close === 'function') {
+            await automationProcesses[storeId].browser.close();
+            console.log(`[${storeId}] 기존 브라우저 인스턴스 종료됨`);
+          }
+        } catch (e) {
+          console.error(`[${storeId}] 기존 브라우저 종료 오류:`, e);
+        }
         delete automationProcesses[storeId];
       }
 
-      const store = STORES.find((s) => s.id === storeId);
-      if (store) {
-        // 프로세스 객체를 명시적으로 초기화
-        automationProcesses[storeId] = { 
-          stopped: false,
-          browser: null,
-          abortController: new AbortController()
-        };
-
-        // 상태 즉시 전송 (동기)
-        if (mainWindow) {
-          const status = {
+      const storeInfo = STORES.find((s: Store) => s.id === storeId);
+      if (!storeInfo) {
+        console.error(`[${storeId}] 스토어 정보를 찾을 수 없음`);
+        results.push({ storeId, success: false, message: '스토어 정보를 찾을 수 없음' });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('automation-status', {
             storeId,
-            status: 'running',
-            message: '자동화 시작'
-          };
-          mainWindow.webContents.send('automation-status', status);
+            status: 'error',
+            message: '스토어 정보를 찾을 수 없음'
+          });
         }
-        try {
-          automationProcesses[storeId].browser = await appointmentService.handleStore(store);
-          // stopped 속성 안전하게 접근
-          if (mainWindow && automationProcesses[storeId] && !automationProcesses[storeId].stopped) {
-            const status = {
-              storeId,
-              status: 'completed',
-              message: '자동화 완료'
-            };
-            mainWindow.webContents.send('automation-status', status);
-          }
-        } catch (error) {
-          console.error(`Automation error for ${storeId}:`, error);
-          // stopped 속성 안전하게 접근
-          if (mainWindow && automationProcesses[storeId] && !automationProcesses[storeId].stopped) {
-            const status = {
-              storeId,
-              status: 'error',
-              message: `오류: ${error.message || '알 수 없는 오류'}`
-            };
-            mainWindow.webContents.send('automation-status', status);
-          }
-          // 에러 발생 시 프로세스 정리
-          if (automationProcesses[storeId]?.browser) {
-            try { 
-              await automationProcesses[storeId].browser.close(); 
-            } catch {}
-          }
-          delete automationProcesses[storeId];
-        }
+        continue; // 다음 매장으로 진행
       }
-      results.push({
-        storeId,
+
+      console.log(`[${storeId}] 스토어 정보:`, storeInfo.name);
+      automationProcesses[storeId] = initializeAutomationProcess(); // 새 프로세스 초기화
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('automation-status', {
+          storeId,
+          status: 'running',
+          message: '자동화 시작 중...'
+        });
+      }
+
+      try {
+        // appointmentService.handleStore가 Playwright Browser 인스턴스를 반환한다고 가정
+        const browserInstance = await appointmentService.handleStore(storeInfo);
+        
+        if (browserInstance) {
+          automationProcesses[storeId].browser = browserInstance; // 브라우저 인스턴스 저장
+          automationProcesses[storeId].stopped = false;
+          console.log(`[${storeId}] 자동화 성공적으로 시작됨, 브라우저 ID: ${browserInstance.version()}`); // version() 등으로 식별자 확인 가능
+          results.push({ storeId, success: true, message: '자동화 시작됨', browserId: browserInstance.version() });
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('automation-status', {
+              storeId,
+              status: 'completed', // 또는 'running' 상태를 유지하고 상세 진행 상황을 appointmentService에서 보내도록 구성
+              message: '자동화 실행 중/완료'
+            });
+          }
+        } else {
+          // handleStore가 null이나 undefined를 반환한 경우 (예: 내부 오류 또는 조건 불충족)
+          console.error(`[${storeId}] appointmentService.handleStore에서 유효한 브라우저 인스턴스를 반환하지 않음`);
+          throw new Error('자동화 프로세스 시작에 실패했습니다 (브라우저 없음).');
+        }
+
+      } catch (error: any) {
+        console.error(`[${storeId}] 자동화 처리 중 오류 발생:`, error);
+        results.push({ storeId, success: false, message: error.message || '알 수 없는 오류' });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('automation-status', {
+            storeId,
+            status: 'error',
+            message: `오류: ${error.message || '알 수 없는 오류'}`
+          });
+        }
+        // 오류 발생 시 해당 스토어의 프로세스 정리
+        if (automationProcesses[storeId]?.browser) {
+          try { await automationProcesses[storeId].browser.close(); } catch {}
+        }
+        delete automationProcesses[storeId];
+      }
+    }
+
+    // 모든 요청 처리 후 최종 결과 반환
+    const overallSuccess = results.every(r => r.success);
+    return { success: overallSuccess, data: results };
+  });
+
+  // 자정 예약 자동화 시작 핸들러
+  ipcMain.handle('start-midnight-reservation', async (event, params: { url: string; credentials: any }) => {
+    try {
+      const { url, credentials } = params;
+      console.log('자정 예약 시작 요청 수신:', url);
+      processState.name = 'midnight-reservation';
+      processState.status = 'running';
+      
+      if (midnightReservationService) {
+        await midnightReservationService.startMidnightReservation(url, credentials);
+      } else {
+        throw new Error('자정 예약 서비스가 초기화되지 않았습니다.');
+      }
+      
+      event.sender.send('midnight-reservation-status', {
         status: 'running',
-        message: '자동화 시작'
+        message: '자정 예약 자동화가 실행 중입니다.'
       });
-    }));
-
-    return { success: true, data: results };
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('자정 예약 시작 중 오류 발생:', error);
+      processState.status = 'error';
+      
+      event.sender.send('midnight-reservation-status', {
+        status: 'error',
+        message: `자정 예약 자동화 시작 실패: ${error.message || '알 수 없는 오류'}`
+      });
+      
+      return { success: false, error: error.message || '알 수 없는 오류' };
+    }
+  });
+  
+  // 자정 예약 자동화 중지 핸들러
+  ipcMain.handle('stop-midnight-reservation', async (event) => {
+    try {
+      console.log('자정 예약 중지 요청 수신');
+      processState.status = 'stopped';
+      
+      // 강제 리소스 정리 메서드 호출
+      if (midnightReservationService) {
+        console.log('자정 예약 서비스의 forceClearResources 메서드 호출');
+        await midnightReservationService.forceClearResources().catch(err => {
+          console.error('자원 정리 중 오류 발생:', err);
+        });
+      }
+      
+      event.sender.send('midnight-reservation-status', {
+        status: 'stopped',
+        message: '자정 예약 자동화가 중지되었습니다.'
+      });
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('자정 예약 중지 중 오류 발생:', error);
+      
+      // 오류 발생 시에도 상태 업데이트
+      processState.status = 'error';
+      
+      // 다시 한번 강제 종료 시도
+      if (midnightReservationService) {
+        try {
+          await midnightReservationService.forceClearResources();
+        } catch (cleanupError) {
+          console.error('자원 강제 정리 중 추가 오류 발생:', cleanupError);
+        }
+      }
+      
+      event.sender.send('midnight-reservation-status', {
+        status: 'error',
+        message: `자정 예약 자동화 중지 실패: ${error.message || '알 수 없는 오류'}`
+      });
+      
+      return { success: false, error: error.message || '알 수 없는 오류' };
+    }
   });
 
-  ipcMain.handle('stop-automation', async (event, { stores }) => {
-    if (!Array.isArray(stores)) {
-      return { success: false, error: 'No stores provided' };
-    }
-    
-    for (const storeId of stores) {
-      const proc = automationProcesses[storeId];
-      if (proc) {
-        proc.stopped = true;
-        if (proc.abortController) {
-          proc.abortController.abort(); // 논리적 중단 신호
+  ipcMain.handle('stop-automation', async (event, params?: { storeId?: string }) => { // params 추가
+    const storeIdToStop = params?.storeId;
+    console.log(`자동화 중지 요청 수신: ${storeIdToStop || '모든 매장'}`);
+
+    const processesToStop = storeIdToStop
+      ? automationProcesses[storeIdToStop] ? { [storeIdToStop]: automationProcesses[storeIdToStop] } : {}
+      : automationProcesses;
+
+    let allStoppedSuccessfully = true;
+
+    for (const storeId in processesToStop) {
+      const processToStop = automationProcesses[storeId];
+      if (!processToStop) continue;
+
+      console.log(`[${storeId}] 자동화 중지 처리 시작`);
+      try {
+        processToStop.stopped = true;
+        if (processToStop.abortController) {
+          processToStop.abortController.abort();
+          console.log(`[${storeId}] AbortController 시그널 전송 완료`);
         }
-        if (proc.browser) {
-          try { await proc.browser.close(); } catch {}
+
+        if (processToStop.browser) {
+          console.log(`[${storeId}] 브라우저 인스턴스 종료 시작`);
+          try {
+            // Playwright Browser 인스턴스에 직접 close 호출
+            await processToStop.browser.close();
+            console.log(`[${storeId}] 브라우저 인스턴스 종료 완료`);
+          } catch (browserError) {
+            console.error(`[${storeId}] 브라우저 종료 중 오류:`, browserError);
+            // Playwright 브라우저의 경우 process().kill() 직접 사용 어려움. close()로 충분해야 함.
+          }
         }
-        if (mainWindow) {
-          const status = {
-            storeId,
-            status: 'stopped',
-            message: '자동화 중지됨'
-          };
-          mainWindow.webContents.send('automation-status', status);
+        
+        // mainWindow가 유효한지 확인 후 메시지 전송
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('automation-status', {
+                storeId,
+                status: 'stopped',
+                message: '자동화가 중지되었습니다.'
+            });
+        }
+        delete automationProcesses[storeId]; // 프로세스 목록에서 제거
+        console.log(`[${storeId}] 자동화 중지 완료 및 프로세스 목록에서 제거됨`);
+
+      } catch (error: unknown) {
+        console.error(`[${storeId}] 자동화 중지 중 오류 발생:`, error);
+        allStoppedSuccessfully = false;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('automation-status', {
+                storeId,
+                status: 'error',
+                message: `자동화 중지 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+            });
         }
       }
     }
-    return { success: true };
+
+    // 전역 상태 업데이트 (모든 매장 중지 시)
+    if (!storeIdToStop) {
+        processState.status = allStoppedSuccessfully ? 'stopped' : 'error';
+        // 전역 automation 객체 초기화 (만약 여전히 사용된다면)
+        automation = initializeAutomationProcess(); 
+        console.log('모든 매장 자동화 중지 처리 후 전역 상태 업데이트');
+    }
+
+    return { success: allStoppedSuccessfully };
   });
 
-  ipcMain.on('time-sync-error', (event, err) => {
+  ipcMain.on('time-sync-error', (event: any, err: any) => {
     if (mainWindow) {
       mainWindow.webContents.send('time-sync-error', err);
     }
@@ -268,7 +440,7 @@ app.whenReady().then(async () => {
   }
 
   // Set up session
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+  session.defaultSession.webRequest.onHeadersReceived((details: any, callback: any) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
@@ -288,7 +460,7 @@ app.whenReady().then(async () => {
   try {
     // 시간 동기화 실행 (타임아웃 설정)
     console.log('시간 동기화 시작...');
-    const syncPromise = timeSync.syncTime().catch(err => {
+    const syncPromise = timeSync.syncTime().catch((err: Error) => {
       console.error('Time sync error (무시):', err);
       return Promise.resolve(); // 에러가 발생해도 계속 진행
     });
@@ -327,11 +499,28 @@ app.on('activate', () => {
 });
 
 // Handle app quit
-app.on('will-quit', (event) => {
+app.on('will-quit', (event: any) => {
   // Clean up resources
-  if (reservationScheduler) {
+  if (typeof reservationScheduler.stop === 'function') {
     reservationScheduler.stop().catch(console.error);
   }
+  
+  // 자정 예약 서비스 정리
+  if (midnightReservationService) {
+    midnightReservationService.stopMidnightReservation().catch(console.error);
+  }
+  
+  // 남아있는 자동화 프로세스 정리
+  Object.keys(automationProcesses).forEach(async (storeId) => {
+    try {
+      const proc = automationProcesses[storeId];
+      if (proc && proc.browser) {
+        await proc.browser.close();
+      }
+    } catch (err) {
+      console.error(`${storeId} 자동화 프로세스 정리 중 오류:`, err);
+    }
+  });
 });
 
 // Handle uncaught exceptions
@@ -344,3 +533,18 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 module.exports = { app };
+
+function initializeAutomationProcess(): AutomationProcess {
+  return {
+    stopped: false,
+    browser: null,
+    context: null,
+    page: null,
+    abortController: new AbortController(),
+    currentRetry: 0,
+    lastActionTime: Date.now()
+  };
+}
+
+// 환경 변수 설정
+require('dotenv').config();

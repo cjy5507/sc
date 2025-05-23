@@ -48,10 +48,12 @@ export const watchModelsRelations = relations(watchModels, ({ one, many }) => ({
 // 사용자 테이블 정의
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  clerkId: varchar("clerk_id", { length: 255 }).unique().notNull(),
+  clerkId: varchar("clerk_id", { length: 255 }).unique(), // Clerk ID는 선택사항으로 변경
   email: varchar("email", { length: 255 }).unique().notNull(),
   name: varchar("name", { length: 100 }).notNull(),
   phoneNumber: varchar("phone_number", { length: 20 }),
+  carrier: varchar("carrier", { length: 20 }), // 통신사 (SKT, KT, LG U+ 등)
+  password: text("password"), // 해시된 비밀번호 저장
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

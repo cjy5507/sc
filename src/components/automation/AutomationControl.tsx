@@ -1,7 +1,7 @@
 'use client';
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/src/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/card";
 import { Loader2, Play, Square, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from 'sonner';
@@ -20,7 +20,7 @@ interface StoreConfig {
 const STORES: StoreConfig[] = [
   {
     id: 'chronodigm',
-    name: '롯데 명동 (크로노다임)',
+    name: '롯데 명동 (크로노디그마)',
     url: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
     selector: '.fappointment .purpose-card'
   },
@@ -31,13 +31,13 @@ const STORES: StoreConfig[] = [
     selector: '.booking-wrapper .booking-option'
   },
   {
-    id: 'hyundai',
+    id: 'hyundaiwatch',
     name: '현대 무역 (현대시계)',
     url: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/appointment/',
     selector: '.appointment-section .appointment-choice'
   },
   {
-    id: 'hongbo',
+    id: 'hongbowatch',
     name: '롯데 서면 (홍보시계)',
     url: 'https://www.hongbowatch.co.kr/rolex/contact-busan/appointment/',
     selector: '.booking-container .booking-card'
@@ -112,11 +112,16 @@ export function AutomationControl() {
   const handleStartStore = async (storeId: string) => {
     if (storeLoading[storeId]) return;
     try {
+      console.log(`Starting automation for store: ${storeId}`);
       setStoreLoading(prev => ({ ...prev, [storeId]: true }));
       if (isElectron) {
+        console.log(`Running in Electron environment, accessing electronAPI`);
         const electronAPI = (window as any).electronAPI;
+        console.log(`ElectronAPI available:`, electronAPI);
+        console.log(`Calling startAutomation with store ID: ${storeId}`);
         // @ts-ignore
         const result = await electronAPI.startAutomation({ stores: [storeId] });
+        console.log(`Automation result:`, result);
         if (result.success) {
           setStatus(prev => ({
             ...prev,
@@ -130,78 +135,210 @@ export function AutomationControl() {
       }
       setSelectedStores(prev => prev.includes(storeId) ? prev : [...prev, storeId]);
     } catch (error) {
+      console.error(`Error starting automation:`, error);
       toast.error(`자동화 시작 중 오류: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setStoreLoading(prev => ({ ...prev, [storeId]: false }));
     }
   };
 
-  // 매장별 중지
+  // 매장별 중지 - 브라우저 종료 기능 추가
   const handleStopStore = async (storeId: string) => {
     if (storeLoading[storeId]) return;
     try {
       setStoreLoading(prev => ({ ...prev, [storeId]: true }));
       if (isElectron) {
         const electronAPI = (window as any).electronAPI;
-        // @ts-ignore
-        await electronAPI.stopAutomation({ stores: [storeId] });
+        
+        console.log(`Stopping automation for store: ${storeId}`);
+        
+        // 브라우저 종료 옵션을 true로 설정하여 중지 요청
+        await electronAPI.stopAutomation({ 
+          stores: [storeId],
+          closeBrowser: true // 브라우저 창 종료 옵션 추가
+        });
+        
+        // 상태 업데이트
+        setStatus(prev => ({ 
+          ...prev, 
+          [storeId]: { status: 'idle', message: '' } 
+        }));
+        
+        // 선택된 매장에서 제거
+        setSelectedStores(prev => prev.filter(id => id !== storeId));
+        
+        // 성공 메시지 표시
+        toast.success(`${storeId} 자동화가 중지되었습니다.`);
       }
-      setStatus(prev => ({ ...prev, [storeId]: { status: 'idle', message: '' } }));
-      setSelectedStores(prev => prev.filter(id => id !== storeId));
     } catch (error) {
-      toast.error('개별 중지 중 오류');
+      console.error('Store stop error:', error);
+      toast.error(`개별 중지 중 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      
+      // 오류 발생해도 상태 업데이트
+      setStatus(prev => ({ 
+        ...prev, 
+        [storeId]: { status: 'idle', message: '' } 
+      }));
+      
+      // 선택된 매장에서 제거
+      setSelectedStores(prev => prev.filter(id => id !== storeId));
     } finally {
       setStoreLoading(prev => ({ ...prev, [storeId]: false }));
     }
   };
 
-  // 전체 시작
+  // 전체 시작 - 병렬 실행 방식으로 수정
   const handleStartAll = async () => {
-    const storesToStart = STORES.map(s => s.id).filter(id => status[id].status === 'idle' || status[id].status === 'stopped');
-    if (storesToStart.length === 0) return;
     try {
-      storesToStart.forEach(id => setStoreLoading(prev => ({ ...prev, [id]: true })));
+      // 이미 진행 중인 매장이 있는지 확인
+      const runningStores = Object.entries(status)
+        .filter(([_, s]) => IN_PROGRESS_STATUSES.includes(s.status || 'idle'))
+        .map(([id]) => id);
+      
+      if (runningStores.length > 0) {
+        toast.error('이미 진행 중인 매장이 있습니다.');
+        return;
+      }
+      
+      // 매장 ID 배열 생성
+      const storeIds = STORES.map(store => store.id);
+      
+      // 모든 매장 로딩 상태로 설정
+      storeIds.forEach(id => 
+        setStoreLoading(prev => ({ ...prev, [id]: true }))
+      );
+      
       if (isElectron) {
         const electronAPI = (window as any).electronAPI;
-        // @ts-ignore
-        const result = await electronAPI.startAutomation({ stores: storesToStart });
-        if (result.success) {
+        console.log(`Starting all stores: ${storeIds.join(', ')}`);
+        
+        // 각 매장을 개별적으로 병렬 시작 (Promise.all 사용)
+        const startPromises = storeIds.map(async (storeId) => {
+          try {
+            console.log(`Starting individual store: ${storeId}`);
+            // 각 매장별로 개별 호출하여 병렬 처리
+            const result = await electronAPI.startAutomation({ 
+              stores: [storeId] 
+            });
+            
+            if (result.success) {
+              // 개별 매장 상태 업데이트
+              setStatus(prev => ({
+                ...prev,
+                [storeId]: { status: 'running', message: '자동화 실행 중' }
+              }));
+              
+              // 선택된 매장에 추가
+              setSelectedStores(prev => 
+                prev.includes(storeId) ? prev : [...prev, storeId]
+              );
+              
+              return { storeId, success: true };
+            } else {
+              throw new Error(result.error || 'Failed to start automation');
+            }
+          } catch (error) {
+            console.error(`Error starting store ${storeId}:`, error);
+            toast.error(`${storeId} 자동화 시작 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+            
+            // 오류 발생 시 로딩 상태 해제
+            setStoreLoading(prev => ({ ...prev, [storeId]: false }));
+            return { storeId, success: false, error };
+          }
+        });
+        
+        // 모든 매장 시작 요청을 병렬로 처리
+        await Promise.all(startPromises);
+      } else {
+        // 테스트 환경에서는 시뮬레이션
+        setTimeout(() => {
           setStatus(prev => {
             const next = { ...prev };
-            storesToStart.forEach(id => {
-              next[id] = { status: 'running', message: '자동화 실행 중...' };
+            storeIds.forEach(id => {
+              next[id] = { status: 'running', message: '자동화 실행 중 (시뮬레이션)' };
             });
             return next;
           });
-        } else {
-          throw new Error(result.error || 'Failed to start automation');
-        }
-      } else {
-        throw new Error('Automation is only available in the desktop app');
+          setSelectedStores(storeIds);
+        }, 1000);
       }
-      setSelectedStores(storesToStart);
     } catch (error) {
-      toast.error(`자동화 시작 중 오류: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error starting all automations:', error);
+      toast.error('자동화 시작 중 오류가 발생했습니다.');
     } finally {
-      storesToStart.forEach(id => setStoreLoading(prev => ({ ...prev, [id]: false })));
+      // 로딩 상태 해제
+      STORES.forEach(store => 
+        setStoreLoading(prev => ({ ...prev, [store.id]: false }))
+      );
     }
   };
 
-  // 전체 중지
+  // 전체 중지 - 브라우저 종료 기능 추가
   const handleStopAll = async () => {
-    const runningStores = STORES.map(s => s.id).filter(id => status[id].status === 'running' || status[id].status === 'waiting');
+    const runningStores = STORES.map(s => s.id).filter(id => 
+      IN_PROGRESS_STATUSES.includes(status[id]?.status || 'idle')
+    );
+    
     if (runningStores.length === 0) return;
+    
     try {
-      runningStores.forEach(id => setStoreLoading(prev => ({ ...prev, [id]: true })));
+      // 모든 실행 중인 매장 로딩 상태로 설정
+      runningStores.forEach(id => 
+        setStoreLoading(prev => ({ ...prev, [id]: true }))
+      );
+      
       if (isElectron) {
         const electronAPI = (window as any).electronAPI;
-        // @ts-ignore
-        await electronAPI.stopAutomation({ stores: runningStores });
-        // 창 닫기 추가
-        if (electronAPI.closeWindow) {
-          electronAPI.closeWindow();
-        }
+        
+        console.log(`Stopping all stores: ${runningStores.join(', ')}`);
+        
+        // 각 매장을 개별적으로 병렬 중지 (Promise.all 사용)
+        const stopPromises = runningStores.map(async (storeId) => {
+          try {
+            console.log(`Stopping individual store: ${storeId}`);
+            // 브라우저 종료 옵션을 true로 설정하여 중지 요청
+            await electronAPI.stopAutomation({ 
+              stores: [storeId],
+              closeBrowser: true // 브라우저 창 종료 옵션 추가
+            });
+            
+            // 개별 매장 상태 업데이트
+            setStatus(prev => ({
+              ...prev,
+              [storeId]: { status: 'idle', message: '' }
+            }));
+            
+            return { storeId, success: true };
+          } catch (error) {
+            console.error(`Error stopping store ${storeId}:`, error);
+            
+            // 오류 발생해도 상태 업데이트
+            setStatus(prev => ({
+              ...prev,
+              [storeId]: { status: 'idle', message: '' }
+            }));
+            
+            return { storeId, success: false, error };
+          } finally {
+            // 개별 로딩 상태 해제
+            setStoreLoading(prev => ({ ...prev, [storeId]: false }));
+          }
+        });
+        
+        // 모든 매장 중지 요청을 병렬로 처리
+        await Promise.all(stopPromises);
+        
+        // 모든 선택된 매장 초기화
+        setSelectedStores([]);
+        
+        // 성공 메시지 표시
+        toast.success('모든 자동화가 중지되었습니다.');
       }
+    } catch (error) {
+      console.error('All stores stop error:', error);
+      toast.error(`전체 중지 중 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      
+      // 오류 발생해도 모든 상태 업데이트
       setStatus(prev => {
         const next = { ...prev };
         runningStores.forEach(id => {
@@ -209,11 +346,9 @@ export function AutomationControl() {
         });
         return next;
       });
-      setSelectedStores(prev => prev.filter(id => !runningStores.includes(id)));
-    } catch (error) {
-      toast.error('전체 중지 중 오류');
-    } finally {
-      runningStores.forEach(id => setStoreLoading(prev => ({ ...prev, [id]: false })));
+      
+      // 모든 선택된 매장 초기화
+      setSelectedStores([]);
     }
   };
 

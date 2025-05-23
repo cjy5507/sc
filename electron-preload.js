@@ -11,25 +11,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
     log: (...args) => console.log(...args),
     error: (...args) => console.error(...args),
   },
-  // 자동화 시작 함수
-  startAutomation: (storeConfig) => {
-    return new Promise((resolve) => {
-      // 응답 이벤트 핸들러
-      const handler = (_, response) => {
-        resolve(response);
-        // 메모리 누수 방지를 위해 리스너 제거
-        ipcRenderer.removeListener('automation-reply', handler);
-      };
-      
-      // 이벤트 리스너 등록 및 메시지 전송
-      ipcRenderer.once('automation-reply', handler);
-      ipcRenderer.send('start-automation', storeConfig);
-    });
+  // 자동화 시작 함수 - invoke 사용으로 변경
+  startAutomation: (params) => {
+    console.log('preload: startAutomation called with params:', params);
+    return ipcRenderer.invoke('start-automation', params);
+  },
+  // 자동화 중지 함수
+  stopAutomation: (params) => {
+    console.log('preload: stopAutomation called with params:', params);
+    return ipcRenderer.invoke('stop-automation', params);
+  },
+  // 스토어 목록 가져오기
+  getStores: () => {
+    return ipcRenderer.invoke('get-stores');
+  },
+  // 시간 동기화
+  syncTime: () => {
+    return ipcRenderer.invoke('sync-time');
   },
   closeWindow: () => ipcRenderer.send('close-window'),
   getTimeStatus: () => timeSync.getStatus(),
   onTimeSyncUpdate: (callback) => {
     ipcRenderer.on('time-sync-update', (_, status) => callback(status));
+  },
+  // 자동화 상태 이벤트 처리
+  onAutomationStatus: (callback) => {
+    ipcRenderer.on('automation-status', (_, status) => {
+      console.log('preload: automation-status received:', status);
+      callback(status);
+    });
   },
   // 추가: 자동화 실행 시점에만 시간 동기화 시작
   startTimeSync: () => timeSync.start(),

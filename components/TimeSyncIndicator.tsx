@@ -26,6 +26,16 @@ export function TimeSyncIndicator({
   
   const { toast } = useToast();
   const [showToast, setShowToast] = useState(false);
+  const [localTime, setLocalTime] = useState<string>(new Date().toLocaleTimeString());
+
+  // 현재 시간을 1초마다 업데이트
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLocalTime(new Date().toLocaleTimeString());
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Show toast when sync state changes to not synced
   useEffect(() => {
@@ -62,7 +72,29 @@ export function TimeSyncIndicator({
     return <CheckCircle2 className="h-4 w-4 mr-1" />;
   };
 
-  if (status == null && error == null) return null;
+  // 동기화된 시간 또는 현재 시간 표시
+  const getDisplayTime = () => {
+    const syncedTime = getFormattedLastSyncedTime();
+    // 동기화 시간이 있으면 표시, 없으면 현재 시간 표시
+    return syncedTime !== 'Never' ? syncedTime : localTime;
+  };
+
+  // 시간 동기화 상태 초기화 시에도 표시
+  if (status == null && error == null) {
+    return (
+      <div className={className}>
+        <div className="flex items-center">
+          <Badge variant="secondary" className="flex items-center">
+            <Clock className="h-3 w-3 mr-1" />
+            <span>초기화 중...</span>
+          </Badge>
+          <span className="text-xs text-muted-foreground ml-2">
+            {localTime}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={className}>
@@ -75,7 +107,7 @@ export function TimeSyncIndicator({
           <span className="ml-1">{formattedOffset()}</span>
         </Badge>
         <span className="text-xs text-muted-foreground ml-2">
-          {getFormattedLastSyncedTime()}
+          {getDisplayTime()}
         </span>
       </div>
 

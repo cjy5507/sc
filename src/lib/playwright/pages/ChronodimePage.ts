@@ -12,24 +12,28 @@ const STORE_URLS = {
 
 const STORE_SELECTORS = {
   chronodigm: {
+    purposeSelector: 'select[name="purpose"], .purpose-selector',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',
     successMessage: '.success-message'
   },
   unopangyo: {
+    purposeSelector: 'select[name="purpose"], .purpose-selector',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',
     successMessage: '.success-message'
   },
   hyundai: {
+    purposeSelector: 'select[name="purpose"], .purpose-selector',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',
     successMessage: '.success-message'
   },
   hongbo: {
+    purposeSelector: 'select[name="purpose"], .purpose-selector',
     datePicker: 'input[type="date"]',
     timeSlot: '.time-slot',
     submitButton: 'button[type="submit"]',
@@ -45,6 +49,34 @@ export class ChronodimePage extends BasePage {
     super(page, STORE_URLS[storeType]);
     this.storeType = storeType;
     this.selectors = STORE_SELECTORS[storeType];
+  }
+
+  /**
+   * 방문 목적 선택
+   * @param purpose 방문 목적 (예: '롤렉스 구매')
+   */
+  async selectPurpose(purpose: string) {
+    try {
+      // 셀렉트 박스 찾기 시도
+      const purposeSelector = await this.page.$(this.selectors.purposeSelector);
+      
+      if (purposeSelector) {
+        // 셀렉트 박스인 경우
+        await this.page.selectOption(this.selectors.purposeSelector, { label: purpose });
+      } else {
+        // 셀렉트 박스가 없는 경우, 다른 UI 요소를 찾아서 클릭
+        // 예: 라디오 버튼 또는 버튼 클릭
+        await this.page.click(`text="${purpose}"`);
+      }
+      
+      // 목적 선택 후 잠시 대기
+      await this.page.waitForTimeout(1000);
+      
+      console.log(`방문 목적 '${purpose}' 선택 완료`);
+    } catch (error) {
+      console.error(`방문 목적 선택 실패: ${error}`);
+      // 예약 프로세스는 계속 진행
+    }
   }
 
   /**
@@ -132,6 +164,7 @@ export class ChronodimePage extends BasePage {
     }
   ) {
     try {
+      await this.selectPurpose(purpose);
       await this.selectDate(date);
       await this.selectTime(time);
       return await this.submitReservation(userInfo);

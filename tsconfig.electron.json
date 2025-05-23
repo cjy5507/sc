@@ -1,32 +1,25 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "dist/electron",
-    "rootDir": ".",
-    "module": "CommonJS",
     "target": "ES2020",
+    "module": "CommonJS",
     "moduleResolution": "node",
     "esModuleInterop": true,
     "strict": true,
-    "sourceMap": true,
-    "resolveJsonModule": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist/electron",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./*"]
     },
-    "types": ["node"],
-    "allowJs": true
+    "typeRoots": ["node_modules/@types", "electron/types"],
+    "allowJs": true,
+    "checkJs": false,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "removeComments": false,
+    "jsx": "preserve"
   },
-  "include": [
-    "electron/**/*.ts",
-    "src/services/reservationScheduler.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "**/*.spec.ts",
-    "**/node_modules/**",
-    "**/dist/**"
-  ]
+  "include": ["electron/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

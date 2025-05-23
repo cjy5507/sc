@@ -11,7 +11,6 @@ export const stores: IClientStore[] = [
     displayName: '롯데 명동 (크로노다임)',
     url: 'https://www.chronodigmwatch.co.kr/rolex/contact-seoul/appointment/',
     selectors: {
-      purposeCard: '.fappointment .purpose-card',
       dateSelector: '.date-selector',
       timeSelector: '.time-slot',
       agreementCheckbox: '.agreement-checkbox',
@@ -24,7 +23,6 @@ export const stores: IClientStore[] = [
     displayName: '현대 판교 (우노와치)',
     url: 'https://www.unopangyo.com/rolex/contact-gyeonggi/',
     selectors: {
-      purposeCard: '.booking-wrapper .booking-option',
       dateSelector: '.date-picker',
       timeSelector: '.time-option',
       agreementCheckbox: '.terms-checkbox',
@@ -37,7 +35,6 @@ export const stores: IClientStore[] = [
     displayName: '현대 무역 (현대시계)',
     url: 'https://www.hyundaiwatch.co.kr/rolex/contact-seoul/appointment/',
     selectors: {
-      purposeCard: '.appointment-section .appointment-choice',
       dateSelector: '.calendar-selector',
       timeSelector: '.time-selector',
       agreementCheckbox: '.agreement-check',
@@ -50,7 +47,6 @@ export const stores: IClientStore[] = [
     displayName: '롯데 서면 (홍보시계)',
     url: 'https://www.hongbowatch.co.kr/rolex/contact-busan/appointment/',
     selectors: {
-      purposeCard: '.booking-container .booking-card',
       dateSelector: '.date-container',
       timeSelector: '.time-slot',
       agreementCheckbox: '.agreement-box',

@@ -10,6 +10,8 @@ node_modules
 /dist
 /release
 /dist_electron
+/dist_electron_*
+/dist_*
 
 # Logs
 npm-debug.log*

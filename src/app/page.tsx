@@ -1,7 +1,7 @@
 'use client';
 
-import { ElectronProvider } from '@/contexts/ElectronContext';
-import { Sidebar } from "@/components/layout/sidebar";
+import { ElectronProvider } from '@/src/contexts/ElectronContext';
+import { Sidebar } from "@/src/components/layout/sidebar";
 
 export default function Home() {
   return (

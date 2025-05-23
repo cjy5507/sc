@@ -1,7 +1,7 @@
 'use client';
 
-import { AutomationControl } from '@/components/automation/AutomationControl';
-import { AutomationProvider } from '@/contexts/AutomationContext';
+import { AutomationControl } from '@/src/components/automation/AutomationControl';
+import { AutomationProvider } from '@/src/contexts/AutomationContext';
 
 export default function AutomationPage() {
   return (
